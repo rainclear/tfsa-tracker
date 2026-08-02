@@ -1,0 +1,5 @@
+tfsa.db
+tfsa.db-wal
+tfsa.db-shm
+tfsa-tracker
+.env
