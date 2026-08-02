@@ -1,65 +1,65 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"tfsa-tracker/auth"
 	"tfsa-tracker/config"
 	"tfsa-tracker/handlers"
 	"tfsa-tracker/models"
-	"tfsa-tracker/services"
+
+	_ "modernc.org/sqlite"
 )
 
 func main() {
 	cfg := config.LoadConfig()
 
+	// Ensure DB directory exists if mounting a volume
+	if err := os.MkdirAll("/mnt/db", 0755); err != nil && !os.IsExist(err) {
+		log.Printf("Warning: Could not create /mnt/db directory: %v", err)
+	}
+
 	db, err := models.InitDB(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("Database initialization failed: %v", err)
+		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
 	sessionMgr := auth.NewSessionManager()
-	emailService := services.NewEmailService(db, cfg)
-
-	authHandler := &handlers.AuthHandler{
-		DB:           db,
-		Session:      sessionMgr,
-		EmailService: emailService,
-	}
-
-	adminHandler := &handlers.AdminHandler{
-		DB:           db,
-		EmailService: emailService,
-	}
+	authHandler := handlers.NewAuthHandler(db, sessionMgr, cfg)
+	tfsaHandler := handlers.NewTFSAHandler(db)
 
 	mux := http.NewServeMux()
 
-	// Public Routes
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("OK")) })
-	mux.HandleFunc("GET /register", authHandler.Register)
-	mux.HandleFunc("POST /register", authHandler.Register)
-	mux.HandleFunc("GET /activate", authHandler.Activate)
-	mux.HandleFunc("GET /login", authHandler.Login)
-	mux.HandleFunc("POST /login", authHandler.Login)
-	mux.HandleFunc("POST /logout", authHandler.Logout)
+	// 1. Root route handler (Redirects / to /dashboard)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+	})
 
-	// User Routes
-	mux.HandleFunc("GET /dashboard", sessionMgr.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
-		userID, _ := auth.GetUserID(r.Context())
-		user, _ := models.GetUserByID(db, userID)
-		fmt.Fprintf(w, "Welcome %s!", user.Email)
-	}))
+	// 2. Auth Routes
+	mux.HandleFunc("/login", authHandler.Login)
+	mux.HandleFunc("/register", authHandler.Register)
+	mux.HandleFunc("/logout", authHandler.Logout)
+	mux.HandleFunc("/activate", authHandler.Activate)
 
-	// Admin Routes
-	mux.HandleFunc("GET /admin/dashboard", sessionMgr.RequireAdmin(adminHandler.Dashboard))
-	mux.HandleFunc("POST /admin/approve-user", sessionMgr.RequireAdmin(adminHandler.ApproveUser))
+	// 3. Protected Dashboard Routes
+	mux.HandleFunc("/dashboard", sessionMgr.RequireAuth(tfsaHandler.Dashboard))
+	mux.HandleFunc("/transaction/add", sessionMgr.RequireAuth(tfsaHandler.AddTransaction))
+	mux.HandleFunc("/transaction/delete", sessionMgr.RequireAuth(tfsaHandler.DeleteTransaction))
 
-	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("🚀 TFSA Tracker running on http://localhost%s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("Server error: %v", err)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("Server listening on port %s...", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
 	}
 }
