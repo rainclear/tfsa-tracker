@@ -2,7 +2,8 @@ package handlers
 
 import (
 	"database/sql"
-	"fmt"
+	"embed"
+	"html/template"
 	"net/http"
 
 	"tfsa-tracker/auth"
@@ -11,35 +12,43 @@ import (
 	"tfsa-tracker/services"
 )
 
+//go:embed templates/login.html templates/register.html
+var authTemplateFS embed.FS
+
 type AuthHandler struct {
 	DB           *sql.DB
 	SessionMgr   *auth.SessionManager
 	EmailService *services.EmailService
 	Config       *config.Config
+	loginTmpl    *template.Template
+	registerTmpl *template.Template
 }
 
 func NewAuthHandler(db *sql.DB, sm *auth.SessionManager, cfg *config.Config) *AuthHandler {
+	loginTmpl, err := template.ParseFS(authTemplateFS, "templates/login.html")
+	if err != nil {
+		panic("Failed to parse login template: " + err.Error())
+	}
+
+	registerTmpl, err := template.ParseFS(authTemplateFS, "templates/register.html")
+	if err != nil {
+		panic("Failed to parse register template: " + err.Error())
+	}
+
 	return &AuthHandler{
 		DB:           db,
 		SessionMgr:   sm,
 		EmailService: services.NewEmailService(db, cfg),
 		Config:       cfg,
+		loginTmpl:    loginTmpl,
+		registerTmpl: registerTmpl,
 	}
 }
 
-// Login renders the login page or processes credentials
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `
-			<h2>Login - TFSA Tracker</h2>
-			<form method="POST" action="/login">
-				<label>Email: <input type="email" name="email" required></label><br><br>
-				<label>Password: <input type="password" name="password" required></label><br><br>
-				<button type="submit">Sign In</button>
-			</form>
-			<p>Need an account? <a href="/register">Register here</a></p>
-		`)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		h.loginTmpl.Execute(w, nil)
 		return
 	}
 
@@ -48,7 +57,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := models.AuthenticateUser(h.DB, email, password)
 	if err != nil {
-		http.Error(w, "Invalid credentials or account not yet approved", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnauthorized)
+		h.loginTmpl.Execute(w, map[string]string{
+			"Error": "Invalid email/password or account pending approval.",
+		})
 		return
 	}
 
@@ -56,47 +69,37 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 }
 
-// Register processes new user registration requests
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `
-			<h2>Register - TFSA Tracker</h2>
-			<form method="POST" action="/register">
-				<label>Email: <input type="email" name="email" required></label><br><br>
-				<label>Password: <input type="password" name="password" required></label><br><br>
-				<button type="submit">Register Account</button>
-			</form>
-			<p>Already have an account? <a href="/login">Login</a></p>
-		`)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		h.registerTmpl.Execute(w, nil)
 		return
 	}
 
 	email := r.FormValue("email")
 	password := r.FormValue("password")
 
-	// Call models.CreateUser with 3 arguments (db, email, password)
 	user, err := models.CreateUser(h.DB, email, password)
 	if err != nil {
-		http.Error(w, "Error creating account: "+err.Error(), http.StatusBadRequest)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		h.registerTmpl.Execute(w, map[string]string{
+			"Error": "Registration failed: " + err.Error(),
+		})
 		return
 	}
 
-	// Generate activation token
 	token, err := h.EmailService.GenerateActivationToken(user.ID)
 	if err == nil {
 		_ = h.EmailService.SendActivationEmail(user.Email, token)
 	}
 
-	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, `
-		<h3>Registration Successful!</h3>
-		<p>Your registration request has been submitted. An administrator must approve your account before you can log in.</p>
-		<p><a href="/login">Return to Login</a></p>
-	`)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.registerTmpl.Execute(w, map[string]string{
+		"Success": "Registration successful! An administrator must approve your account before you can sign in.",
+	})
 }
 
-// Activate verifies the token sent to the user's email
 func (h *AuthHandler) Activate(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
@@ -110,15 +113,12 @@ func (h *AuthHandler) Activate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, `
-		<h3>Account Activated!</h3>
-		<p>Your account has been activated successfully. You may now log in.</p>
-		<p><a href="/login">Log In Now</a></p>
-	`)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.loginTmpl.Execute(w, map[string]string{
+		"Success": "Account activated successfully! You may now sign in.",
+	})
 }
 
-// Logout destroys the current user session
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	h.SessionMgr.DestroySession(w, r)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
