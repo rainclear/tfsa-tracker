@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"database/sql"
-	"fmt"
+	"html/template"
 	"net/http"
 	"strconv"
 	"time"
@@ -16,19 +16,26 @@ type TFSAHandler struct {
 	Service *services.TFSAService
 }
 
+type DashboardViewData struct {
+	Summary      *models.TFSASummary
+	Transactions []models.Transaction
+	UserRole     models.UserRole
+}
+
 func NewTFSAHandler(db *sql.DB) *TFSAHandler {
 	return &TFSAHandler{
 		Service: services.NewTFSAService(db),
 	}
 }
 
-// Dashboard shows the TFSA contribution room summary and transaction history
 func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+
+	role, _ := r.Context().Value(auth.RoleContextKey).(models.UserRole)
 
 	summary, err := h.Service.CalculateCurrentSummary(userID)
 	if err != nil {
@@ -42,20 +49,21 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Basic HTML response (Replace with html/template in UI step)
-	fmt.Fprintf(w, "<h1>TFSA Dashboard (%d)</h1>", summary.Year)
-	fmt.Fprintf(w, "<p>Available Room: $%.2f</p>", summary.RemainingRoom)
-	fmt.Fprintf(w, "<p>Total Deposited This Year: $%.2f</p>", summary.TotalDeposited)
-	fmt.Fprintf(w, "<p>Total Withdrawn This Year: $%.2f</p>", summary.TotalWithdrawn)
-
-	fmt.Fprintf(w, "<h2>Recent Transactions</h2><ul>")
-	for _, tx := range txs {
-		fmt.Fprintf(w, "<li>[%s] %s - $%.2f (%s)</li>", tx.Date, tx.Type, tx.Amount, tx.Note)
+	tmpl, err := template.ParseFiles("templates/dashboard.html")
+	if err != nil {
+		http.Error(w, "Error loading template: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
-	fmt.Fprintf(w, "</ul>")
+
+	data := DashboardViewData{
+		Summary:      summary,
+		Transactions: txs,
+		UserRole:     role,
+	}
+
+	tmpl.Execute(w, data)
 }
 
-// AddTransaction handles adding a deposit or withdrawal
 func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
@@ -83,7 +91,6 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// DeleteTransaction handles transaction deletion
 func (h *TFSAHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
