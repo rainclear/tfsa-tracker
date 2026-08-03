@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +13,8 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+var staticFS embed.FS
 
 func main() {
 	cfg := config.LoadConfig()
@@ -33,6 +36,9 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(db)
 
 	mux := http.NewServeMux()
+
+	fileServer := http.FileServer(http.FS(staticFS))
+	mux.Handle("/static/", fileServer)
 
 	// 1. Root route handler (Redirects / to /dashboard)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
