@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TFSA Dashboard - TFSA Tracker</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <!-- Navbar -->
+    <nav class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl font-bold text-indigo-400">TFSA Tracker</span>
+            <span class="bg-slate-700 text-slate-300 text-xs font-semibold px-2.5 py-1 rounded-full">Tax Year {{.Summary.Year}}</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            {{if eq .UserRole "ADMIN"}}
+                <a href="/admin" class="text-sm font-medium text-indigo-400 hover:text-indigo-300 transition">Admin Panel</a>
+            {{end}}
+            <a href="/logout" class="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-slate-200 transition">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-6 py-8 space-y-8">
+        <!-- Summary Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Remaining Room</p>
+                <p class="text-3xl font-extrabold text-emerald-400 mt-2">${{printf "%.2f" .Summary.RemainingRoom}}</p>
+                <p class="text-xs text-slate-400 mt-1">Available for contribution</p>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Deposited ({{.Summary.Year}})</p>
+                <p class="text-3xl font-bold text-indigo-400 mt-2">${{printf "%.2f" .Summary.TotalDeposited}}</p>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Withdrawn ({{.Summary.Year}})</p>
+                <p class="text-3xl font-bold text-amber-400 mt-2">${{printf "%.2f" .Summary.TotalWithdrawn}}</p>
+                <p class="text-xs text-slate-400 mt-1">Restored next Jan 1st</p>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">New Limit ({{.Summary.Year}})</p>
+                <p class="text-3xl font-bold text-slate-200 mt-2">${{printf "%.2f" .Summary.NewRoomThisYear}}</p>
+            </div>
+        </div>
+
+        <!-- Add Transaction & History Split -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Form Card -->
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm h-fit">
+                <h3 class="text-lg font-bold text-slate-100 mb-4">Record Transaction</h3>
+                <form action="/transaction/add" method="POST" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Transaction Type</label>
+                        <select name="type" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                            <option value="DEPOSIT">Deposit (+)</option>
+                            <option value="WITHDRAWAL">Withdrawal (-)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Amount ($ CAD)</label>
+                        <input type="number" step="0.01" min="0.01" name="amount" required placeholder="1000.00" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Date</label>
+                        <input type="date" name="date" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Institution / Note</label>
+                        <input type="text" name="note" placeholder="e.g. Wealthsimple / Questrade" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg transition shadow-md">Add Transaction</button>
+                </form>
+            </div>
+
+            <!-- Transaction Table -->
+            <div class="lg:col-span-2 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <h3 class="text-lg font-bold text-slate-100 mb-4">Transaction History</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-700 text-xs font-medium text-slate-400 uppercase">
+                                <th class="py-3 px-2">Date</th>
+                                <th class="py-3 px-2">Type</th>
+                                <th class="py-3 px-2">Amount</th>
+                                <th class="py-3 px-2">Note</th>
+                                <th class="py-3 px-2 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700/50 text-sm">
+                            {{range .Transactions}}
+                            <tr class="hover:bg-slate-750 transition">
+                                <td class="py-3 px-2 text-slate-300">{{.Date}}</td>
+                                <td class="py-3 px-2">
+                                    {{if eq .Type "DEPOSIT"}}
+                                        <span class="bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2 py-0.5 rounded">DEPOSIT</span>
+                                    {{else}}
+                                        <span class="bg-amber-500/10 text-amber-400 text-xs font-semibold px-2 py-0.5 rounded">WITHDRAWAL</span>
+                                    {{end}}
+                                </td>
+                                <td class="py-3 px-2 font-medium text-slate-100">${{printf "%.2f" .Amount}}</td>
+                                <td class="py-3 px-2 text-slate-400">{{.Note}}</td>
+                                <td class="py-3 px-2 text-right">
+                                    <form action="/transaction/delete" method="POST" class="inline">
+                                        <input type="hidden" name="id" value="{{.ID}}">
+                                        <button type="submit" onclick="return confirm('Delete this transaction?')" class="text-xs text-rose-400 hover:text-rose-300 font-medium">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {{else}}
+                            <tr>
+                                <td colspan="5" class="py-8 text-center text-slate-500">No transactions recorded yet.</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

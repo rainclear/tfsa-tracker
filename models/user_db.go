@@ -190,3 +190,22 @@ func SetRegistrationEnabled(db *sql.DB, enabled bool) error {
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, val)
 	return err
 }
+
+// GetAllUsers retrieves all registered user accounts for admin management
+func GetAllUsers(db *sql.DB) ([]User, error) {
+	rows, err := db.Query(`SELECT id, email, role, status, created_at FROM users ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Status, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, nil
+}

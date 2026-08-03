@@ -30,6 +30,7 @@ func main() {
 	sessionMgr := auth.NewSessionManager()
 	authHandler := handlers.NewAuthHandler(db, sessionMgr, cfg)
 	tfsaHandler := handlers.NewTFSAHandler(db)
+	adminHandler := handlers.NewAdminHandler(db)
 
 	mux := http.NewServeMux()
 
@@ -52,6 +53,10 @@ func main() {
 	mux.HandleFunc("/dashboard", sessionMgr.RequireAuth(tfsaHandler.Dashboard))
 	mux.HandleFunc("/transaction/add", sessionMgr.RequireAuth(tfsaHandler.AddTransaction))
 	mux.HandleFunc("/transaction/delete", sessionMgr.RequireAuth(tfsaHandler.DeleteTransaction))
+
+	// Protected Admin Routes
+	mux.HandleFunc("/admin", sessionMgr.RequireAdmin(adminHandler.AdminPanel))
+	mux.HandleFunc("/admin/approve", sessionMgr.RequireAdmin(adminHandler.ApproveUser))
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -2,60 +2,65 @@ package handlers
 
 import (
 	"database/sql"
-	"fmt"
+	"embed"
+	"html/template"
 	"net/http"
-	"strconv"
 
 	"tfsa-tracker/models"
-	"tfsa-tracker/services"
 )
 
+//go:embed templates/admin.html
+var adminTemplateFS embed.FS
+
 type AdminHandler struct {
-	DB           *sql.DB
-	EmailService *services.EmailService
+	DB            *sql.DB
+	adminTemplate *template.Template
 }
 
-func (h *AdminHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
-	users, err := models.ListAllUsers(h.DB)
+type AdminViewData struct {
+	Users []models.User
+}
+
+func NewAdminHandler(db *sql.DB) *AdminHandler {
+	tmpl, err := template.ParseFS(adminTemplateFS, "templates/admin.html")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		panic("Failed to parse embedded admin template: " + err.Error())
+	}
+
+	return &AdminHandler{
+		DB:            db,
+		adminTemplate: tmpl,
+	}
+}
+
+// AdminPanel renders all user registration requests for admin review
+func (h *AdminHandler) AdminPanel(w http.ResponseWriter, r *http.Request) {
+	users, err := models.GetAllUsers(h.DB)
+	if err != nil {
+		http.Error(w, "Failed to load users: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	fmt.Fprintf(w, "<h1>Admin Dashboard</h1><ul>")
-	for _, u := range users {
-		fmt.Fprintf(w, "<li>ID: %d | Email: %s | Role: %s | Status: %s</li>", u.ID, u.Email, u.Role, u.Status)
+	data := AdminViewData{
+		Users: users,
 	}
-	fmt.Fprintf(w, "</ul>")
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.adminTemplate.Execute(w, data); err != nil {
+		http.Error(w, "Template execution error: "+err.Error(), http.StatusInternalServerError)
+	}
 }
 
-// ApproveUser generates activation token and sends email
+// ApproveUser approves a pending user account
 func (h *AdminHandler) ApproveUser(w http.ResponseWriter, r *http.Request) {
-	targetID, _ := strconv.ParseInt(r.FormValue("user_id"), 10, 64)
+	if r.Method == http.MethodPost {
+		userIDStr := r.FormValue("user_id")
+		_, err := h.DB.Exec(`UPDATE users SET status = 'APPROVED' WHERE id = ?`, userIDStr)
+		if err != nil {
+			http.Error(w, "Failed to approve user: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 
-	targetUser, err := models.GetUserByID(h.DB, targetID)
-	if err != nil {
-		http.Error(w, "User not found", http.StatusBadRequest)
-		return
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 	}
-
-	// Set status to PENDING_ACTIVATION
-	if err := models.UpdateUserStatus(h.DB, targetID, models.StatusPendingActivation); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Generate Token and dispatch email
-	token, err := h.EmailService.GenerateActivationToken(targetID)
-	if err != nil {
-		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
-		return
-	}
-
-	if err := h.EmailService.SendActivationEmail(targetUser.Email, token); err != nil {
-		http.Error(w, "Failed to send activation email", http.StatusInternalServerError)
-		return
-	}
-
-	http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
 }

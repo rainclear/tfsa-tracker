@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"embed"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -12,8 +13,14 @@ import (
 	"tfsa-tracker/services"
 )
 
+// Go embed includes template files directly into the compiled binary
+//
+//go:embed templates/dashboard.html
+var templateFS embed.FS
+
 type TFSAHandler struct {
-	Service *services.TFSAService
+	Service   *services.TFSAService
+	dashboard *template.Template
 }
 
 type DashboardViewData struct {
@@ -23,8 +30,15 @@ type DashboardViewData struct {
 }
 
 func NewTFSAHandler(db *sql.DB) *TFSAHandler {
+	// Parse embedded template once at startup
+	tmpl, err := template.ParseFS(templateFS, "templates/dashboard.html")
+	if err != nil {
+		panic("Failed to parse embedded dashboard template: " + err.Error())
+	}
+
 	return &TFSAHandler{
-		Service: services.NewTFSAService(db),
+		Service:   services.NewTFSAService(db),
+		dashboard: tmpl,
 	}
 }
 
@@ -49,19 +63,16 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmpl, err := template.ParseFiles("templates/dashboard.html")
-	if err != nil {
-		http.Error(w, "Error loading template: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	data := DashboardViewData{
 		Summary:      summary,
 		Transactions: txs,
 		UserRole:     role,
 	}
 
-	tmpl.Execute(w, data)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.dashboard.Execute(w, data); err != nil {
+		http.Error(w, "Template execution error: "+err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
