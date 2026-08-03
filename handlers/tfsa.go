@@ -98,6 +98,13 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Check if the request originated from HTMX
+		if r.Header.Get("HX-Request") == "true" {
+			h.renderUpdatedComponents(w, userID)
+			return
+		}
+
+		// Fallback for non-HTMX requests (e.g., standard form submissions)
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 	}
 }
@@ -116,5 +123,41 @@ func (h *TFSAHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Check if the request originated from HTMX
+	if r.Header.Get("HX-Request") == "true" {
+		h.renderUpdatedComponents(w, userID)
+		return
+	}
+
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+}
+
+// Helper method: renders updated transaction rows along with OOB-swapped summary cards
+func (h *TFSAHandler) renderUpdatedComponents(w http.ResponseWriter, userID int64) {
+	summary, err := h.Service.CalculateCurrentSummary(userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	txs, err := h.Service.GetUserTransactions(userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// 1. Render updated list rows to replace innerHTML of #transaction-list
+	if err := h.dashboard.ExecuteTemplate(w, "transaction-rows", txs); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Render summary cards with hx-swap-oob="true"
+	// HTMX will automatically swap the DOM element with id="summary-cards" upon receiving this fragment
+	if err := h.dashboard.ExecuteTemplate(w, "summary-cards", summary); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
