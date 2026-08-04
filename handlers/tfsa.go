@@ -14,8 +14,6 @@ import (
 	"tfsa-tracker/services"
 )
 
-// Go embed includes template files directly into the compiled binary
-//
 //go:embed templates/dashboard.html
 var templateFS embed.FS
 
@@ -31,8 +29,8 @@ type DashboardViewData struct {
 }
 
 func NewTFSAHandler(db *sql.DB) *TFSAHandler {
-	// Parse embedded template once at startup
-	tmpl, err := template.ParseFS(templateFS, "templates/dashboard.html")
+	// Parse with explicit template base name to ensure define blocks are recognized properly
+	tmpl, err := template.New("dashboard.html").ParseFS(templateFS, "templates/dashboard.html")
 	if err != nil {
 		panic("Failed to parse embedded dashboard template: " + err.Error())
 	}
@@ -99,13 +97,11 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Check if the request originated from HTMX
 		if r.Header.Get("HX-Request") == "true" {
 			h.renderUpdatedComponents(w, userID)
 			return
 		}
 
-		// Fallback for non-HTMX requests (e.g., standard form submissions)
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 	}
 }
@@ -124,7 +120,6 @@ func (h *TFSAHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Check if the request originated from HTMX
 	if r.Header.Get("HX-Request") == "true" {
 		h.renderUpdatedComponents(w, userID)
 		return
@@ -133,7 +128,6 @@ func (h *TFSAHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 }
 
-// Helper method: renders updated transaction rows along with OOB-swapped summary cards
 func (h *TFSAHandler) renderUpdatedComponents(w http.ResponseWriter, userID int64) {
 	summary, err := h.Service.CalculateCurrentSummary(userID)
 	if err != nil {
@@ -147,18 +141,17 @@ func (h *TFSAHandler) renderUpdatedComponents(w http.ResponseWriter, userID int6
 		return
 	}
 
-	// Buffer to collect rendered HTML fragments cleanly
 	var buf bytes.Buffer
 
-	// 1. Render updated list rows (this will replace innerHTML of #transaction-list)
+	// 1. Render transaction rows (Target: #transaction-list)
 	if err := h.dashboard.ExecuteTemplate(&buf, "transaction-rows", txs); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Error rendering rows: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// 2. Render summary cards with hx-swap-oob="true" (HTMX will automatically swap #summary-cards)
+	// 2. Render summary cards via OOB (Target: #summary-cards)
 	if err := h.dashboard.ExecuteTemplate(&buf, "summary-cards", summary); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Error rendering summary: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

@@ -26,7 +26,7 @@
 
     <main class="max-w-6xl mx-auto px-6 py-8 space-y-8">
         
-        <!-- Summary Cards Wrapper (initial render calls the "summary-cards" template) -->
+        <!-- Summary Cards Wrapper -->
         <div id="summary-cards">
             {{template "summary-cards" .Summary}}
         </div>
@@ -36,7 +36,6 @@
             <!-- Form Card -->
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm h-fit">
                 <h3 class="text-lg font-bold text-slate-100 mb-4">Record Transaction</h3>
-                <!-- HTMX Form Submission: posts via AJAX, targets #transaction-list, and resets on success -->
                 <form hx-post="/transaction/add"
                       hx-target="#transaction-list"
                       hx-swap="innerHTML"
@@ -79,7 +78,6 @@
                                 <th class="py-3 px-2 text-right">Action</th>
                             </tr>
                         </thead>
-                        <!-- HTMX Swap Target: #transaction-list -->
                         <tbody id="transaction-list" class="divide-y divide-slate-700/50 text-sm">
                             {{template "transaction-rows" .Transactions}}
                         </tbody>
@@ -91,7 +89,6 @@
 </body>
 </html>
 
-<!-- Sub-template 1: Summary Cards (includes hx-swap-oob="true" so HTMX updates this element out-of-band) -->
 {{define "summary-cards"}}
 <div id="summary-cards" hx-swap-oob="true" class="grid grid-cols-1 md:grid-cols-4 gap-6">
     <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
@@ -115,7 +112,6 @@
 </div>
 {{end}}
 
-<!-- Sub-template 2: Transaction Rows -->
 {{define "transaction-rows"}}
     {{range .}}
     <tr class="hover:bg-slate-750 transition">
@@ -130,7 +126,6 @@
         <td class="py-3 px-2 font-medium text-slate-100">${{printf "%.2f" .Amount}}</td>
         <td class="py-3 px-2 text-slate-400">{{.Note}}</td>
         <td class="py-3 px-2 text-right">
-            <!-- Delete action using HTMX post request -->
             <button hx-post="/transaction/delete?id={{.ID}}"
                     hx-target="#transaction-list"
                     hx-swap="innerHTML"
