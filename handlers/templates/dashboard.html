@@ -28,21 +28,19 @@
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                 <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Remaining Room</p>
-                <p class="text-3xl font-extrabold text-emerald-400 mt-2">${{printf "%.2f" .Summary.RemainingRoom}}</p>
-                <p class="text-xs text-slate-400 mt-1">Available for contribution</p>
+                <p class="text-3xl font-extrabold text-emerald-400 mt-2">${{printf "%.2f" .Summary.RemainingRoomDollars}}</p>
             </div>
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                 <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Deposited ({{.Summary.Year}})</p>
-                <p class="text-3xl font-bold text-indigo-400 mt-2">${{printf "%.2f" .Summary.TotalDeposited}}</p>
+                <p class="text-3xl font-bold text-indigo-400 mt-2">${{printf "%.2f" .Summary.TotalDepositedDollars}}</p>
             </div>
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                 <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Withdrawn ({{.Summary.Year}})</p>
-                <p class="text-3xl font-bold text-amber-400 mt-2">${{printf "%.2f" .Summary.TotalWithdrawn}}</p>
-                <p class="text-xs text-slate-400 mt-1">Restored next Jan 1st</p>
+                <p class="text-3xl font-bold text-amber-400 mt-2">${{printf "%.2f" .Summary.TotalWithdrawnDollars}}</p>
             </div>
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                 <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">New Limit ({{.Summary.Year}})</p>
-                <p class="text-3xl font-bold text-slate-200 mt-2">${{printf "%.2f" .Summary.NewRoomThisYear}}</p>
+                <p class="text-3xl font-bold text-slate-200 mt-2">${{printf "%.2f" .Summary.NewRoomThisYearDollars}}</p>
             </div>
         </div>
 
@@ -113,21 +111,9 @@
                             {{range .Transactions}}
                             <tr class="hover:bg-slate-750 transition">
                                 <td class="py-3 px-2 text-slate-300">{{.Date}}</td>
-                                <td class="py-3 px-2">
-                                    {{if eq .Type "DEPOSIT"}}
-                                        <span class="bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2 py-0.5 rounded">DEPOSIT</span>
-                                    {{else}}
-                                        <span class="bg-amber-500/10 text-amber-400 text-xs font-semibold px-2 py-0.5 rounded">WITHDRAWAL</span>
-                                    {{end}}
-                                </td>
-                                <td class="py-3 px-2 font-medium text-slate-100">${{printf "%.2f" .Amount}}</td>
+                                <td class="py-3 px-2">...</td>
+                                <td class="py-3 px-2 font-medium text-slate-100">${{printf "%.2f" .AmountInDollars}}</td>
                                 <td class="py-3 px-2 text-slate-400">{{.Note}}</td>
-                                <td class="py-3 px-2 text-right">
-                                    <form action="/transaction/delete" method="POST" class="inline" onsubmit="return confirm('Delete this transaction?');">
-                                        <input type="hidden" name="id" value="{{.ID}}">
-                                        <button type="submit" class="text-xs text-rose-400 hover:text-rose-300 font-medium">Delete</button>
-                                    </form>
-                                </td>
                             </tr>
                             {{else}}
                             <tr>

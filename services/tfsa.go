@@ -17,17 +17,17 @@ func NewTFSAService(db *sql.DB) *TFSAService {
 	return &TFSAService{DB: db}
 }
 
-func (s *TFSAService) GetAnnualLimits() (map[int]float64, error) {
+func (s *TFSAService) GetAnnualLimits() (map[int]int64, error) {
 	rows, err := s.DB.Query(`SELECT year, amount FROM tfsa_annual_limits ORDER BY year ASC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	limits := make(map[int]float64)
+	limits := make(map[int]int64)
 	for rows.Next() {
 		var year int
-		var amount float64
+		var amount int64
 		if err := rows.Scan(&year, &amount); err != nil {
 			return nil, err
 		}
@@ -36,7 +36,6 @@ func (s *TFSAService) GetAnnualLimits() (map[int]float64, error) {
 	return limits, nil
 }
 
-// CalculateSummaryForYear calculates contribution room breakdown based on user's StartYear
 func (s *TFSAService) CalculateSummaryForYear(userID int64, targetYear int) (*models.TFSASummary, error) {
 	user, err := models.GetUserByID(s.DB, userID)
 	if err != nil {
@@ -51,7 +50,6 @@ func (s *TFSAService) CalculateSummaryForYear(userID int64, targetYear int) (*mo
 		targetYear = startYear
 	}
 
-	// Dynamically ensure annual limits exist up to targetYear
 	for y := startYear; y <= targetYear; y++ {
 		if err := models.EnsureAnnualLimitExists(s.DB, y); err != nil {
 			log.Printf("Warning: Failed to ensure annual limit for year %d: %v", y, err)
@@ -63,15 +61,14 @@ func (s *TFSAService) CalculateSummaryForYear(userID int64, targetYear int) (*mo
 		return nil, err
 	}
 
-	var unusedRoomPrior float64 = 0
-	var priorYearWithdrawals float64 = 0
+	var unusedRoomPrior int64 = 0
+	var priorYearWithdrawals int64 = 0
 
-	// Chronologically calculate year by year starting from user's StartYear
 	for y := startYear; y < targetYear; y++ {
 		newRoom := limits[y]
 		totalAvailable := unusedRoomPrior + priorYearWithdrawals + newRoom
 
-		var deposited, withdrawn float64
+		var deposited, withdrawn int64
 		s.DB.QueryRow(`
 			SELECT COALESCE(SUM(CASE WHEN type = 'DEPOSIT' THEN amount ELSE 0 END), 0),
 			       COALESCE(SUM(CASE WHEN type = 'WITHDRAWAL' THEN amount ELSE 0 END), 0)
@@ -88,11 +85,10 @@ func (s *TFSAService) CalculateSummaryForYear(userID int64, targetYear int) (*mo
 		priorYearWithdrawals = withdrawn
 	}
 
-	// Current target year calculation
 	newRoomThisYear := limits[targetYear]
 	totalAvailableThisYear := unusedRoomPrior + priorYearWithdrawals + newRoomThisYear
 
-	var depositedThisYear, withdrawnThisYear float64
+	var depositedThisYear, withdrawnThisYear int64
 	s.DB.QueryRow(`
 		SELECT COALESCE(SUM(CASE WHEN type = 'DEPOSIT' THEN amount ELSE 0 END), 0),
 		       COALESCE(SUM(CASE WHEN type = 'WITHDRAWAL' THEN amount ELSE 0 END), 0)
@@ -142,15 +138,16 @@ func (s *TFSAService) GetUserTransactions(userID int64) ([]models.Transaction, e
 	return txs, nil
 }
 
-func (s *TFSAService) AddTransaction(userID int64, txType models.TransactionType, amount float64, dateStr, note string) error {
-	if amount <= 0 {
+// AddTransaction converts user dollar float inputs to int64 cents before storing
+func (s *TFSAService) AddTransaction(userID int64, txType models.TransactionType, amountCents int64, dateStr, note string) error {
+	if amountCents <= 0 {
 		return fmt.Errorf("amount must be greater than zero")
 	}
 
 	_, err := s.DB.Exec(`
 		INSERT INTO transactions (user_id, type, amount, date, note)
 		VALUES (?, ?, ?, ?, ?)
-	`, userID, txType, amount, dateStr, note)
+	`, userID, txType, amountCents, dateStr, note)
 	return err
 }
 

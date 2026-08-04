@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"html/template"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -100,6 +101,7 @@ func (h *TFSAHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Inside AddTransaction in handlers/tfsa.go
 func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
@@ -109,7 +111,8 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		txType := models.TransactionType(r.FormValue("type"))
-		amount, _ := strconv.ParseFloat(r.FormValue("amount"), 64)
+		amountFloat, _ := strconv.ParseFloat(r.FormValue("amount"), 64)
+		amountCents := int64(math.Round(amountFloat * 100)) // Convert $101.23 to 10123
 		dateStr := r.FormValue("date")
 		note := r.FormValue("note")
 
@@ -117,7 +120,7 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 			dateStr = time.Now().Format("2006-01-02")
 		}
 
-		err := h.Service.AddTransaction(userID, txType, amount, dateStr, note)
+		err := h.Service.AddTransaction(userID, txType, amountCents, dateStr, note)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

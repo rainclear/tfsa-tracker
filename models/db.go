@@ -23,17 +23,20 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
 
+	if err := migrateREALToCents(db); err != nil {
+		log.Printf("Migration warning: %v", err)
+	}
+
 	if err := seedAnnualLimits(db); err != nil {
 		return nil, fmt.Errorf("failed to seed annual limits: %w", err)
 	}
 
-	log.Println("✅ SQLite database initialized with User Profile fields")
+	log.Println("✅ SQLite database initialized with CENTS Integer Money Representation")
 	return db, nil
 }
 
 func createTables(db *sql.DB) error {
 	schema := `
-	-- 1. Users table (Email as Username)
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		email TEXT UNIQUE NOT NULL,
@@ -45,7 +48,6 @@ func createTables(db *sql.DB) error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
-	-- 2. Activation Email Tokens
 	CREATE TABLE IF NOT EXISTS email_tokens (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id INTEGER NOT NULL,
@@ -54,25 +56,24 @@ func createTables(db *sql.DB) error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
-	-- 3. Transactions table
+	-- Stores amount as INTEGER cents
 	CREATE TABLE IF NOT EXISTS transactions (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id INTEGER NOT NULL,
 		type TEXT NOT NULL CHECK(type IN ('DEPOSIT', 'WITHDRAWAL')),
-		amount REAL NOT NULL CHECK(amount > 0),
+		amount INTEGER NOT NULL CHECK(amount > 0),
 		date DATE NOT NULL,
 		note TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
-	-- 4. CRA Annual Limits table
+	-- Stores limit as INTEGER cents
 	CREATE TABLE IF NOT EXISTS tfsa_annual_limits (
 		year INTEGER PRIMARY KEY,
-		amount REAL NOT NULL
+		amount INTEGER NOT NULL
 	);
 
-	-- 5. Global system settings
 	CREATE TABLE IF NOT EXISTS system_settings (
 		key TEXT PRIMARY KEY,
 		value TEXT NOT NULL
@@ -80,13 +81,56 @@ func createTables(db *sql.DB) error {
 
 	INSERT OR IGNORE INTO system_settings (key, value) VALUES ('registration_enabled', 'true');
 	`
-	if _, err := db.Exec(schema); err != nil {
-		return err
+	_, err := db.Exec(schema)
+	return err
+}
+
+// Automatically migrates old float/REAL values in SQLite to integer cents
+func migrateREALToCents(db *sql.DB) error {
+	// Check if transactions table contains REAL data (by checking typeof value)
+	var txType string
+	err := db.QueryRow(`SELECT typeof(amount) FROM transactions LIMIT 1`).Scan(&txType)
+	if err == nil && txType == "real" {
+		log.Println("🔄 Migrating transactions.amount from REAL to INTEGER (cents)...")
+		_, err := db.Exec(`
+			CREATE TABLE transactions_new (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL,
+				type TEXT NOT NULL CHECK(type IN ('DEPOSIT', 'WITHDRAWAL')),
+				amount INTEGER NOT NULL CHECK(amount > 0),
+				date DATE NOT NULL,
+				note TEXT DEFAULT '',
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+			);
+			INSERT INTO transactions_new (id, user_id, type, amount, date, note, created_at)
+			SELECT id, user_id, type, CAST(ROUND(amount * 100) AS INTEGER), date, note, created_at FROM transactions;
+			DROP TABLE transactions;
+			ALTER TABLE transactions_new RENAME TO transactions;
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to migrate transactions: %w", err)
+		}
 	}
 
-	// Dynamic column migrations for existing SQLite databases
-	_, _ = db.Exec("ALTER TABLE users ADD COLUMN start_year INTEGER DEFAULT 2009")
-	_, _ = db.Exec("ALTER TABLE users ADD COLUMN phone_number TEXT DEFAULT ''")
+	var limitType string
+	err = db.QueryRow(`SELECT typeof(amount) FROM tfsa_annual_limits LIMIT 1`).Scan(&limitType)
+	if err == nil && limitType == "real" {
+		log.Println("🔄 Migrating tfsa_annual_limits.amount from REAL to INTEGER (cents)...")
+		_, err := db.Exec(`
+			CREATE TABLE tfsa_annual_limits_new (
+				year INTEGER PRIMARY KEY,
+				amount INTEGER NOT NULL
+			);
+			INSERT INTO tfsa_annual_limits_new (year, amount)
+			SELECT year, CAST(ROUND(amount * 100) AS INTEGER) FROM tfsa_annual_limits;
+			DROP TABLE tfsa_annual_limits;
+			ALTER TABLE tfsa_annual_limits_new RENAME TO tfsa_annual_limits;
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to migrate tfsa_annual_limits: %w", err)
+		}
+	}
 
 	return nil
 }
@@ -103,31 +147,32 @@ func EnsureAnnualLimitExists(db *sql.DB, targetYear int) error {
 	}
 
 	var previousYear int
-	var previousAmount float64
-	err = db.QueryRow("SELECT year, amount FROM tfsa_annual_limits WHERE year < ? ORDER BY year DESC LIMIT 1", targetYear).Scan(&previousYear, &previousAmount)
+	var previousAmountCents int64
+	err = db.QueryRow("SELECT year, amount FROM tfsa_annual_limits WHERE year < ? ORDER BY year DESC LIMIT 1", targetYear).Scan(&previousYear, &previousAmountCents)
 
 	if err == sql.ErrNoRows {
-		previousAmount = 5000.0
+		previousAmountCents = 500000 // $5000.00
 	} else if err != nil {
 		return fmt.Errorf("failed to retrieve historical limit before %d: %w", targetYear, err)
 	}
 
-	_, err = db.Exec("INSERT INTO tfsa_annual_limits (year, amount) VALUES (?, ?)", targetYear, previousAmount)
+	_, err = db.Exec("INSERT INTO tfsa_annual_limits (year, amount) VALUES (?, ?)", targetYear, previousAmountCents)
 	if err != nil {
 		return fmt.Errorf("failed to auto-insert limit for year %d: %w", targetYear, err)
 	}
 
-	log.Printf("⚠️ Auto-fallback triggered: TFSA limit for %d was missing. Populated using %d limit ($%.2f)", targetYear, previousYear, previousAmount)
+	log.Printf("⚠️ Auto-fallback triggered: TFSA limit for %d missing. Populated using %d limit ($%.2f)", targetYear, previousYear, float64(previousAmountCents)/100.0)
 	return nil
 }
 
 func seedAnnualLimits(db *sql.DB) error {
-	limits := map[int]float64{
-		2009: 5000, 2010: 5000, 2011: 5000, 2012: 5000,
-		2013: 5500, 2014: 5500, 2015: 10000, 2016: 5500,
-		2017: 5500, 2018: 5500, 2019: 6000, 2020: 6000,
-		2021: 6000, 2022: 6000, 2023: 6500, 2024: 7000,
-		2025: 7000, 2026: 7000,
+	// Base historical records in CENTS
+	limits := map[int]int64{
+		2009: 500000, 2010: 500000, 2011: 500000, 2012: 500000,
+		2013: 550000, 2014: 550000, 2015: 1000000, 2016: 550000,
+		2017: 550000, 2018: 550000, 2019: 600000, 2020: 600000,
+		2021: 600000, 2022: 600000, 2023: 650000, 2024: 700000,
+		2025: 700000, 2026: 700000,
 	}
 
 	stmt, err := db.Prepare("INSERT OR IGNORE INTO tfsa_annual_limits (year, amount) VALUES (?, ?)")
