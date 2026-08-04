@@ -46,37 +46,57 @@
             </div>
         </div>
 
-        <!-- Add Transaction & History Split -->
+        <!-- Add Transaction & Profile Split -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Form Card -->
-            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm h-fit">
-                <h3 class="text-lg font-bold text-slate-100 mb-4">Record Transaction</h3>
-                <form action="/transaction/add" method="POST" class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">Transaction Type</label>
-                        <select name="type" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
-                            <option value="DEPOSIT">Deposit (+)</option>
-                            <option value="WITHDRAWAL">Withdrawal (-)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">Amount ($ CAD)</label>
-                        <input type="number" step="0.01" min="0.01" name="amount" required placeholder="1000.00" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">Date</label>
-                        <input type="date" name="date" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">Institution / Note</label>
-                        <input type="text" name="note" placeholder="e.g. Wealthsimple / Questrade" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
-                    </div>
-                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg transition shadow-md">Add Transaction</button>
-                </form>
+            <!-- Left Side: Profile & Form Cards -->
+            <div class="space-y-6 h-fit">
+                <!-- User Profile Settings Card -->
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                    <h3 class="text-lg font-bold text-slate-100 mb-4">User Settings</h3>
+                    <form action="/user/profile/update" method="POST" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Eligible TFSA Start Year</label>
+                            <input type="number" min="2009" max="2100" name="start_year" value="{{.User.StartYear}}" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                            <p class="text-[10px] text-slate-400 mt-1">Year you turned 18 and became eligible for TFSA room.</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Phone Number (Optional)</label>
+                            <input type="tel" name="phone_number" value="{{.User.PhoneNumber}}" placeholder="+1 416-555-0199" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <button type="submit" class="w-full bg-slate-700 hover:bg-slate-600 text-indigo-300 font-medium py-2 rounded-lg transition shadow-md border border-slate-600">Save Profile</button>
+                    </form>
+                </div>
+
+                <!-- Record Transaction Form Card -->
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                    <h3 class="text-lg font-bold text-slate-100 mb-4">Record Transaction</h3>
+                    <form action="/transaction/add" method="POST" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Transaction Type</label>
+                            <select name="type" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                                <option value="DEPOSIT">Deposit (+)</option>
+                                <option value="WITHDRAWAL">Withdrawal (-)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Amount ($ CAD)</label>
+                            <input type="number" step="0.01" min="0.01" name="amount" required placeholder="1000.00" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Date</label>
+                            <input type="date" name="date" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Institution / Note</label>
+                            <input type="text" name="note" placeholder="e.g. Wealthsimple / Questrade" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg transition shadow-md">Add Transaction</button>
+                    </form>
+                </div>
             </div>
 
-            <!-- Transaction Table -->
-            <div class="lg:col-span-2 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+            <!-- Right Side: Transaction Table -->
+            <div class="lg:col-span-2 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm h-fit">
                 <h3 class="text-lg font-bold text-slate-100 mb-4">Transaction History</h3>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">

@@ -17,7 +17,6 @@ func NewTFSAService(db *sql.DB) *TFSAService {
 	return &TFSAService{DB: db}
 }
 
-// GetAnnualLimits retrieves official CRA contribution limits from SQLite
 func (s *TFSAService) GetAnnualLimits() (map[int]float64, error) {
 	rows, err := s.DB.Query(`SELECT year, amount FROM tfsa_annual_limits ORDER BY year ASC`)
 	if err != nil {
@@ -37,14 +36,22 @@ func (s *TFSAService) GetAnnualLimits() (map[int]float64, error) {
 	return limits, nil
 }
 
-// CalculateSummaryForYear calculates contribution room breakdown for a user up to a target year
+// CalculateSummaryForYear calculates contribution room breakdown based on user's StartYear
 func (s *TFSAService) CalculateSummaryForYear(userID int64, targetYear int) (*models.TFSASummary, error) {
-	startYear := 2009
+	user, err := models.GetUserByID(s.DB, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user info: %w", err)
+	}
+
+	startYear := user.StartYear
+	if startYear < 2009 {
+		startYear = 2009
+	}
 	if targetYear < startYear {
 		targetYear = startYear
 	}
 
-	// Dynamically ensure annual limits exist up to targetYear (on-demand fallback)
+	// Dynamically ensure annual limits exist up to targetYear
 	for y := startYear; y <= targetYear; y++ {
 		if err := models.EnsureAnnualLimitExists(s.DB, y); err != nil {
 			log.Printf("Warning: Failed to ensure annual limit for year %d: %v", y, err)
@@ -59,7 +66,7 @@ func (s *TFSAService) CalculateSummaryForYear(userID int64, targetYear int) (*mo
 	var unusedRoomPrior float64 = 0
 	var priorYearWithdrawals float64 = 0
 
-	// Chronologically calculate year by year up to the target year
+	// Chronologically calculate year by year starting from user's StartYear
 	for y := startYear; y < targetYear; y++ {
 		newRoom := limits[y]
 		totalAvailable := unusedRoomPrior + priorYearWithdrawals + newRoom
@@ -107,13 +114,11 @@ func (s *TFSAService) CalculateSummaryForYear(userID int64, targetYear int) (*mo
 	}, nil
 }
 
-// CalculateCurrentSummary calculates room for the current calendar year
 func (s *TFSAService) CalculateCurrentSummary(userID int64) (*models.TFSASummary, error) {
 	currentYear := time.Now().Year()
 	return s.CalculateSummaryForYear(userID, currentYear)
 }
 
-// GetUserTransactions returns all transactions for a user ordered by date
 func (s *TFSAService) GetUserTransactions(userID int64) ([]models.Transaction, error) {
 	rows, err := s.DB.Query(`
 		SELECT id, user_id, type, amount, date, note, created_at 
@@ -137,7 +142,6 @@ func (s *TFSAService) GetUserTransactions(userID int64) ([]models.Transaction, e
 	return txs, nil
 }
 
-// AddTransaction creates a new deposit or withdrawal record
 func (s *TFSAService) AddTransaction(userID int64, txType models.TransactionType, amount float64, dateStr, note string) error {
 	if amount <= 0 {
 		return fmt.Errorf("amount must be greater than zero")
@@ -150,7 +154,6 @@ func (s *TFSAService) AddTransaction(userID int64, txType models.TransactionType
 	return err
 }
 
-// DeleteTransaction removes a transaction record belonging to the user
 func (s *TFSAService) DeleteTransaction(userID, transactionID int64) error {
 	res, err := s.DB.Exec(`DELETE FROM transactions WHERE id = ? AND user_id = ?`, transactionID, userID)
 	if err != nil {

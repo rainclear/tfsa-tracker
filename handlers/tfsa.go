@@ -22,6 +22,7 @@ type TFSAHandler struct {
 }
 
 type DashboardViewData struct {
+	User         *models.User
 	Summary      *models.TFSASummary
 	Transactions []models.Transaction
 	UserRole     models.UserRole
@@ -48,6 +49,12 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 	role, _ := r.Context().Value(auth.RoleContextKey).(models.UserRole)
 
+	user, err := models.GetUserByID(h.Service.DB, userID)
+	if err != nil {
+		http.Error(w, "Failed to load user profile", http.StatusInternalServerError)
+		return
+	}
+
 	summary, err := h.Service.CalculateCurrentSummary(userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -61,6 +68,7 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := DashboardViewData{
+		User:         user,
 		Summary:      summary,
 		Transactions: txs,
 		UserRole:     role,
@@ -69,6 +77,26 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.dashboard.Execute(w, data); err != nil {
 		http.Error(w, "Template execution error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *TFSAHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		startYear, _ := strconv.Atoi(r.FormValue("start_year"))
+		phone := r.FormValue("phone_number")
+
+		if err := models.UpdateUserProfile(h.Service.DB, userID, startYear, phone); err != nil {
+			http.Error(w, "Failed to update profile: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 	}
 }
 
@@ -95,7 +123,6 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Always redirect back to dashboard (PRG pattern)
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 	}
 }
@@ -115,7 +142,6 @@ func (h *TFSAHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		// Always redirect back to dashboard (PRG pattern)
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 	}
 }

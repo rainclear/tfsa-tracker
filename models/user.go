@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -20,6 +21,33 @@ var (
 	ErrRegistrationClosed = errors.New("registration is currently closed by admin")
 	ErrCannotModifyAdmin  = errors.New("forbidden: cannot modify or delete another admin")
 )
+
+type UserRole string
+
+const (
+	RoleAdmin UserRole = "ADMIN"
+	RoleUser  UserRole = "USER"
+)
+
+type UserStatus string
+
+const (
+	StatusPending           UserStatus = "PENDING"
+	StatusPendingActivation UserStatus = "PENDING_ACTIVATION"
+	StatusApproved          UserStatus = "APPROVED"
+	StatusRejected          UserStatus = "REJECTED"
+)
+
+type User struct {
+	ID           int64      `json:"id"`
+	Email        string     `json:"email"` // Used as Username
+	PasswordHash string     `json:"-"`
+	Role         UserRole   `json:"role"`
+	Status       UserStatus `json:"status"`
+	StartYear    int        `json:"start_year"`
+	PhoneNumber  string     `json:"phone_number"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
 
 // ValidateEmail checks if the username string is a valid email
 func ValidateEmail(email string) error {
@@ -65,7 +93,7 @@ func CreateUser(db *sql.DB, email, password string) (*User, error) {
 		status = StatusApproved
 	}
 
-	query := `INSERT INTO users (email, password_hash, role, status) VALUES (?, ?, ?, ?)`
+	query := `INSERT INTO users (email, password_hash, role, status, start_year, phone_number) VALUES (?, ?, ?, ?, 2009, '')`
 	res, err := db.Exec(query, email, string(hashedPassword), role, status)
 	if err != nil {
 		return nil, ErrUserExists
@@ -77,10 +105,12 @@ func CreateUser(db *sql.DB, email, password string) (*User, error) {
 	}
 
 	return &User{
-		ID:     id,
-		Email:  email,
-		Role:   role,
-		Status: status,
+		ID:          id,
+		Email:       email,
+		Role:        role,
+		Status:      status,
+		StartYear:   2009,
+		PhoneNumber: "",
 	}, nil
 }
 
@@ -89,8 +119,8 @@ func AuthenticateUser(db *sql.DB, email, password string) (*User, error) {
 	var user User
 	var hash string
 
-	query := `SELECT id, email, password_hash, role, status, created_at FROM users WHERE email = ?`
-	err := db.QueryRow(query, email).Scan(&user.ID, &user.Email, &hash, &user.Role, &user.Status, &user.CreatedAt)
+	query := `SELECT id, email, password_hash, role, status, start_year, phone_number, created_at FROM users WHERE email = ?`
+	err := db.QueryRow(query, email).Scan(&user.ID, &user.Email, &hash, &user.Role, &user.Status, &user.StartYear, &user.PhoneNumber, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrInvalidPass
@@ -118,16 +148,25 @@ func AuthenticateUser(db *sql.DB, email, password string) (*User, error) {
 
 func GetUserByID(db *sql.DB, id int64) (*User, error) {
 	var user User
-	query := `SELECT id, email, role, status, created_at FROM users WHERE id = ?`
-	err := db.QueryRow(query, id).Scan(&user.ID, &user.Email, &user.Role, &user.Status, &user.CreatedAt)
+	query := `SELECT id, email, role, status, start_year, phone_number, created_at FROM users WHERE id = ?`
+	err := db.QueryRow(query, id).Scan(&user.ID, &user.Email, &user.Role, &user.Status, &user.StartYear, &user.PhoneNumber, &user.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &user, nil
 }
 
-func ListAllUsers(db *sql.DB) ([]User, error) {
-	rows, err := db.Query(`SELECT id, email, role, status, created_at FROM users ORDER BY id ASC`)
+// UpdateUserProfile updates start_year and phone_number for a user
+func UpdateUserProfile(db *sql.DB, userID int64, startYear int, phoneNumber string) error {
+	if startYear < 2009 {
+		startYear = 2009
+	}
+	_, err := db.Exec(`UPDATE users SET start_year = ?, phone_number = ? WHERE id = ?`, startYear, phoneNumber, userID)
+	return err
+}
+
+func GetAllUsers(db *sql.DB) ([]User, error) {
+	rows, err := db.Query(`SELECT id, email, role, status, start_year, phone_number, created_at FROM users ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -136,40 +175,12 @@ func ListAllUsers(db *sql.DB) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Status, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Status, &u.StartYear, &u.PhoneNumber, &u.CreatedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, u)
 	}
 	return users, nil
-}
-
-func UpdateUserStatus(db *sql.DB, targetUserID int64, newStatus UserStatus) error {
-	targetUser, err := GetUserByID(db, targetUserID)
-	if err != nil {
-		return err
-	}
-
-	if targetUser.Role == RoleAdmin {
-		return ErrCannotModifyAdmin
-	}
-
-	_, err = db.Exec(`UPDATE users SET status = ? WHERE id = ?`, newStatus, targetUserID)
-	return err
-}
-
-func DeleteUser(db *sql.DB, targetUserID int64) error {
-	targetUser, err := GetUserByID(db, targetUserID)
-	if err != nil {
-		return err
-	}
-
-	if targetUser.Role == RoleAdmin {
-		return ErrCannotModifyAdmin
-	}
-
-	_, err = db.Exec(`DELETE FROM users WHERE id = ?`, targetUserID)
-	return err
 }
 
 func IsRegistrationEnabled(db *sql.DB) (bool, error) {
@@ -179,33 +190,4 @@ func IsRegistrationEnabled(db *sql.DB) (bool, error) {
 		return true, nil
 	}
 	return val == "true", nil
-}
-
-func SetRegistrationEnabled(db *sql.DB, enabled bool) error {
-	val := "false"
-	if enabled {
-		val = "true"
-	}
-	_, err := db.Exec(`INSERT INTO system_settings (key, value) VALUES ('registration_enabled', ?) 
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, val)
-	return err
-}
-
-// GetAllUsers retrieves all registered user accounts for admin management
-func GetAllUsers(db *sql.DB) ([]User, error) {
-	rows, err := db.Query(`SELECT id, email, role, status, created_at FROM users ORDER BY id ASC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var users []User
-	for rows.Next() {
-		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Status, &u.CreatedAt); err != nil {
-			return nil, err
-		}
-		users = append(users, u)
-	}
-	return users, nil
 }

@@ -2,31 +2,6 @@ package models
 
 import "time"
 
-type UserRole string
-
-const (
-	RoleAdmin UserRole = "ADMIN"
-	RoleUser  UserRole = "USER"
-)
-
-type UserStatus string
-
-const (
-	StatusPending           UserStatus = "PENDING"
-	StatusPendingActivation UserStatus = "PENDING_ACTIVATION"
-	StatusApproved          UserStatus = "APPROVED"
-	StatusRejected          UserStatus = "REJECTED"
-)
-
-type User struct {
-	ID           int64      `json:"id"`
-	Email        string     `json:"email"` // Used as Username
-	PasswordHash string     `json:"-"`
-	Role         UserRole   `json:"role"`
-	Status       UserStatus `json:"status"`
-	CreatedAt    time.Time  `json:"created_at"`
-}
-
 type EmailToken struct {
 	ID        int64
 	UserID    int64
