@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"database/sql"
 	"embed"
 	"html/template"
@@ -29,8 +28,7 @@ type DashboardViewData struct {
 }
 
 func NewTFSAHandler(db *sql.DB) *TFSAHandler {
-	// Parse with explicit template base name to ensure define blocks are recognized properly
-	tmpl, err := template.New("dashboard.html").ParseFS(templateFS, "templates/dashboard.html")
+	tmpl, err := template.ParseFS(templateFS, "templates/dashboard.html")
 	if err != nil {
 		panic("Failed to parse embedded dashboard template: " + err.Error())
 	}
@@ -97,11 +95,7 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if r.Header.Get("HX-Request") == "true" {
-			h.renderUpdatedComponents(w, userID)
-			return
-		}
-
+		// Always redirect back to dashboard (PRG pattern)
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 	}
 }
@@ -113,48 +107,15 @@ func (h *TFSAHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	txID, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	err := h.Service.DeleteTransaction(userID, txID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	if r.Method == http.MethodPost {
+		txID, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+		err := h.Service.DeleteTransaction(userID, txID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Always redirect back to dashboard (PRG pattern)
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 	}
-
-	if r.Header.Get("HX-Request") == "true" {
-		h.renderUpdatedComponents(w, userID)
-		return
-	}
-
-	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
-}
-
-func (h *TFSAHandler) renderUpdatedComponents(w http.ResponseWriter, userID int64) {
-	summary, err := h.Service.CalculateCurrentSummary(userID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	txs, err := h.Service.GetUserTransactions(userID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	var buf bytes.Buffer
-
-	// 1. Render transaction rows (Target: #transaction-list)
-	if err := h.dashboard.ExecuteTemplate(&buf, "transaction-rows", txs); err != nil {
-		http.Error(w, "Error rendering rows: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// 2. Render summary cards via OOB (Target: #summary-cards)
-	if err := h.dashboard.ExecuteTemplate(&buf, "summary-cards", summary); err != nil {
-		http.Error(w, "Error rendering summary: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(buf.Bytes())
 }

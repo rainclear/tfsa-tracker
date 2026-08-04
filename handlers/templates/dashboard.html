@@ -6,8 +6,6 @@
     <title>TFSA Dashboard - TFSA Tracker</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
     <!-- Navbar -->
@@ -26,9 +24,26 @@
 
     <main class="max-w-6xl mx-auto px-6 py-8 space-y-8">
         
-        <!-- Summary Cards Wrapper -->
-        <div id="summary-cards">
-            {{template "summary-cards" .Summary}}
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Remaining Room</p>
+                <p class="text-3xl font-extrabold text-emerald-400 mt-2">${{printf "%.2f" .Summary.RemainingRoom}}</p>
+                <p class="text-xs text-slate-400 mt-1">Available for contribution</p>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Deposited ({{.Summary.Year}})</p>
+                <p class="text-3xl font-bold text-indigo-400 mt-2">${{printf "%.2f" .Summary.TotalDeposited}}</p>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Withdrawn ({{.Summary.Year}})</p>
+                <p class="text-3xl font-bold text-amber-400 mt-2">${{printf "%.2f" .Summary.TotalWithdrawn}}</p>
+                <p class="text-xs text-slate-400 mt-1">Restored next Jan 1st</p>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">New Limit ({{.Summary.Year}})</p>
+                <p class="text-3xl font-bold text-slate-200 mt-2">${{printf "%.2f" .Summary.NewRoomThisYear}}</p>
+            </div>
         </div>
 
         <!-- Add Transaction & History Split -->
@@ -36,11 +51,7 @@
             <!-- Form Card -->
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm h-fit">
                 <h3 class="text-lg font-bold text-slate-100 mb-4">Record Transaction</h3>
-                <form hx-post="/transaction/add"
-                      hx-target="#transaction-list"
-                      hx-swap="innerHTML"
-                      hx-on::after-request="if(event.detail.successful) this.reset()"
-                      class="space-y-4">
+                <form action="/transaction/add" method="POST" class="space-y-4">
                     <div>
                         <label class="block text-xs font-medium text-slate-400 mb-1">Transaction Type</label>
                         <select name="type" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
@@ -78,8 +89,31 @@
                                 <th class="py-3 px-2 text-right">Action</th>
                             </tr>
                         </thead>
-                        <tbody id="transaction-list" class="divide-y divide-slate-700/50 text-sm">
-                            {{template "transaction-rows" .Transactions}}
+                        <tbody class="divide-y divide-slate-700/50 text-sm">
+                            {{range .Transactions}}
+                            <tr class="hover:bg-slate-750 transition">
+                                <td class="py-3 px-2 text-slate-300">{{.Date}}</td>
+                                <td class="py-3 px-2">
+                                    {{if eq .Type "DEPOSIT"}}
+                                        <span class="bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2 py-0.5 rounded">DEPOSIT</span>
+                                    {{else}}
+                                        <span class="bg-amber-500/10 text-amber-400 text-xs font-semibold px-2 py-0.5 rounded">WITHDRAWAL</span>
+                                    {{end}}
+                                </td>
+                                <td class="py-3 px-2 font-medium text-slate-100">${{printf "%.2f" .Amount}}</td>
+                                <td class="py-3 px-2 text-slate-400">{{.Note}}</td>
+                                <td class="py-3 px-2 text-right">
+                                    <form action="/transaction/delete" method="POST" class="inline" onsubmit="return confirm('Delete this transaction?');">
+                                        <input type="hidden" name="id" value="{{.ID}}">
+                                        <button type="submit" class="text-xs text-rose-400 hover:text-rose-300 font-medium">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {{else}}
+                            <tr>
+                                <td colspan="5" class="py-8 text-center text-slate-500">No transactions recorded yet.</td>
+                            </tr>
+                            {{end}}
                         </tbody>
                     </table>
                 </div>
@@ -88,56 +122,3 @@
     </main>
 </body>
 </html>
-
-{{define "summary-cards"}}
-<div id="summary-cards" hx-swap-oob="true" class="grid grid-cols-1 md:grid-cols-4 gap-6">
-    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
-        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Remaining Room</p>
-        <p class="text-3xl font-extrabold text-emerald-400 mt-2">${{printf "%.2f" .RemainingRoom}}</p>
-        <p class="text-xs text-slate-400 mt-1">Available for contribution</p>
-    </div>
-    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
-        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Deposited ({{.Year}})</p>
-        <p class="text-3xl font-bold text-indigo-400 mt-2">${{printf "%.2f" .TotalDeposited}}</p>
-    </div>
-    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
-        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Withdrawn ({{.Year}})</p>
-        <p class="text-3xl font-bold text-amber-400 mt-2">${{printf "%.2f" .TotalWithdrawn}}</p>
-        <p class="text-xs text-slate-400 mt-1">Restored next Jan 1st</p>
-    </div>
-    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
-        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">New Limit ({{.Year}})</p>
-        <p class="text-3xl font-bold text-slate-200 mt-2">${{printf "%.2f" .NewRoomThisYear}}</p>
-    </div>
-</div>
-{{end}}
-
-{{define "transaction-rows"}}
-    {{range .}}
-    <tr class="hover:bg-slate-750 transition">
-        <td class="py-3 px-2 text-slate-300">{{.Date}}</td>
-        <td class="py-3 px-2">
-            {{if eq .Type "DEPOSIT"}}
-                <span class="bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2 py-0.5 rounded">DEPOSIT</span>
-            {{else}}
-                <span class="bg-amber-500/10 text-amber-400 text-xs font-semibold px-2 py-0.5 rounded">WITHDRAWAL</span>
-            {{end}}
-        </td>
-        <td class="py-3 px-2 font-medium text-slate-100">${{printf "%.2f" .Amount}}</td>
-        <td class="py-3 px-2 text-slate-400">{{.Note}}</td>
-        <td class="py-3 px-2 text-right">
-            <button hx-post="/transaction/delete?id={{.ID}}"
-                    hx-target="#transaction-list"
-                    hx-swap="innerHTML"
-                    hx-confirm="Delete this transaction?"
-                    class="text-xs text-rose-400 hover:text-rose-300 font-medium">
-                Delete
-            </button>
-        </td>
-    </tr>
-    {{else}}
-    <tr>
-        <td colspan="5" class="py-8 text-center text-slate-500">No transactions recorded yet.</td>
-    </tr>
-    {{end}}
-{{end}}
