@@ -108,3 +108,19 @@ func (h *AdminHandler) UpdateAnnualLimit(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 	}
 }
+
+func (h *AdminHandler) DeleteAnnualLimit(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		year, _ := strconv.Atoi(r.FormValue("year"))
+
+		if year >= 2009 {
+			_, err := h.DB.Exec(`DELETE FROM tfsa_annual_limits WHERE year = ?`, year)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	}
+}
