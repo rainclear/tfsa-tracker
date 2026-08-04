@@ -27,7 +27,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to seed annual limits: %w", err)
 	}
 
-	log.Println("✅ SQLite database initialized with Email Authentication & Activation Workflow")
+	log.Println("✅ SQLite database initialized with User Profile fields")
 	return db, nil
 }
 
@@ -40,6 +40,8 @@ func createTables(db *sql.DB) error {
 		password_hash TEXT NOT NULL,
 		role TEXT NOT NULL CHECK(role IN ('ADMIN', 'USER')) DEFAULT 'USER',
 		status TEXT NOT NULL CHECK(status IN ('PENDING', 'PENDING_ACTIVATION', 'APPROVED', 'REJECTED')) DEFAULT 'PENDING',
+		start_year INTEGER DEFAULT 2009,
+		phone_number TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
@@ -78,12 +80,17 @@ func createTables(db *sql.DB) error {
 
 	INSERT OR IGNORE INTO system_settings (key, value) VALUES ('registration_enabled', 'true');
 	`
-	_, err := db.Exec(schema)
-	return err
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+
+	// Dynamic column migrations for existing SQLite databases
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN start_year INTEGER DEFAULT 2009")
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN phone_number TEXT DEFAULT ''")
+
+	return nil
 }
 
-// EnsureAnnualLimitExists checks if a specific year's limit exists in DB.
-// If missing, it dynamically inherits the previous year's limit (fallback mechanism).
 func EnsureAnnualLimitExists(db *sql.DB, targetYear int) error {
 	var count int
 	err := db.QueryRow("SELECT COUNT(*) FROM tfsa_annual_limits WHERE year = ?", targetYear).Scan(&count)
@@ -91,24 +98,20 @@ func EnsureAnnualLimitExists(db *sql.DB, targetYear int) error {
 		return fmt.Errorf("failed to check annual limit for year %d: %w", targetYear, err)
 	}
 
-	// Already exists, no fallback needed
 	if count > 0 {
 		return nil
 	}
 
-	// Find the most recent available annual limit prior to targetYear
 	var previousYear int
 	var previousAmount float64
 	err = db.QueryRow("SELECT year, amount FROM tfsa_annual_limits WHERE year < ? ORDER BY year DESC LIMIT 1", targetYear).Scan(&previousYear, &previousAmount)
 
 	if err == sql.ErrNoRows {
-		// Fallback to default $5000 if no historical data exists
 		previousAmount = 5000.0
 	} else if err != nil {
 		return fmt.Errorf("failed to retrieve historical limit before %d: %w", targetYear, err)
 	}
 
-	// Auto-fill the target year with the previous year's limit
 	_, err = db.Exec("INSERT INTO tfsa_annual_limits (year, amount) VALUES (?, ?)", targetYear, previousAmount)
 	if err != nil {
 		return fmt.Errorf("failed to auto-insert limit for year %d: %w", targetYear, err)
@@ -119,7 +122,6 @@ func EnsureAnnualLimitExists(db *sql.DB, targetYear int) error {
 }
 
 func seedAnnualLimits(db *sql.DB) error {
-	// Base historical records (2009 - 2026)
 	limits := map[int]float64{
 		2009: 5000, 2010: 5000, 2011: 5000, 2012: 5000,
 		2013: 5500, 2014: 5500, 2015: 10000, 2016: 5500,
@@ -140,7 +142,6 @@ func seedAnnualLimits(db *sql.DB) error {
 		}
 	}
 
-	// Auto-fill up to the current wall-clock year during server startup
 	currentYear := time.Now().Year()
 	for y := 2009; y <= currentYear; y++ {
 		if err := EnsureAnnualLimitExists(db, y); err != nil {
