@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"database/sql"
 	"embed"
 	"html/template"
@@ -146,18 +147,21 @@ func (h *TFSAHandler) renderUpdatedComponents(w http.ResponseWriter, userID int6
 		return
 	}
 
+	// Buffer to collect rendered HTML fragments cleanly
+	var buf bytes.Buffer
+
+	// 1. Render updated list rows (this will replace innerHTML of #transaction-list)
+	if err := h.dashboard.ExecuteTemplate(&buf, "transaction-rows", txs); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Render summary cards with hx-swap-oob="true" (HTMX will automatically swap #summary-cards)
+	if err := h.dashboard.ExecuteTemplate(&buf, "summary-cards", summary); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	// 1. Render updated list rows to replace innerHTML of #transaction-list
-	if err := h.dashboard.ExecuteTemplate(w, "transaction-rows", txs); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// 2. Render summary cards with hx-swap-oob="true"
-	// HTMX will automatically swap the DOM element with id="summary-cards" upon receiving this fragment
-	if err := h.dashboard.ExecuteTemplate(w, "summary-cards", summary); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	w.Write(buf.Bytes())
 }

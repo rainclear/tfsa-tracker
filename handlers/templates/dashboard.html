@@ -79,7 +79,7 @@
                                 <th class="py-3 px-2 text-right">Action</th>
                             </tr>
                         </thead>
-                        <!-- HTMX Swap Target Target: #transaction-list -->
+                        <!-- HTMX Swap Target: #transaction-list -->
                         <tbody id="transaction-list" class="divide-y divide-slate-700/50 text-sm">
                             {{template "transaction-rows" .Transactions}}
                         </tbody>
@@ -133,6 +133,7 @@
             <!-- Delete action using HTMX post request -->
             <button hx-post="/transaction/delete?id={{.ID}}"
                     hx-target="#transaction-list"
+                    hx-swap="innerHTML"
                     hx-confirm="Delete this transaction?"
                     class="text-xs text-rose-400 hover:text-rose-300 font-medium">
                 Delete
