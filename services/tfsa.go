@@ -3,6 +3,7 @@ package services
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"tfsa-tracker/models"
@@ -38,14 +39,21 @@ func (s *TFSAService) GetAnnualLimits() (map[int]float64, error) {
 
 // CalculateSummaryForYear calculates contribution room breakdown for a user up to a target year
 func (s *TFSAService) CalculateSummaryForYear(userID int64, targetYear int) (*models.TFSASummary, error) {
-	limits, err := s.GetAnnualLimits()
-	if err != nil {
-		return nil, err
-	}
-
 	startYear := 2009
 	if targetYear < startYear {
 		targetYear = startYear
+	}
+
+	// Dynamically ensure annual limits exist up to targetYear (on-demand fallback)
+	for y := startYear; y <= targetYear; y++ {
+		if err := models.EnsureAnnualLimitExists(s.DB, y); err != nil {
+			log.Printf("Warning: Failed to ensure annual limit for year %d: %v", y, err)
+		}
+	}
+
+	limits, err := s.GetAnnualLimits()
+	if err != nil {
+		return nil, err
 	}
 
 	var unusedRoomPrior float64 = 0

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -81,7 +82,44 @@ func createTables(db *sql.DB) error {
 	return err
 }
 
+// EnsureAnnualLimitExists checks if a specific year's limit exists in DB.
+// If missing, it dynamically inherits the previous year's limit (fallback mechanism).
+func EnsureAnnualLimitExists(db *sql.DB, targetYear int) error {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM tfsa_annual_limits WHERE year = ?", targetYear).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to check annual limit for year %d: %w", targetYear, err)
+	}
+
+	// Already exists, no fallback needed
+	if count > 0 {
+		return nil
+	}
+
+	// Find the most recent available annual limit prior to targetYear
+	var previousYear int
+	var previousAmount float64
+	err = db.QueryRow("SELECT year, amount FROM tfsa_annual_limits WHERE year < ? ORDER BY year DESC LIMIT 1", targetYear).Scan(&previousYear, &previousAmount)
+
+	if err == sql.ErrNoRows {
+		// Fallback to default $5000 if no historical data exists
+		previousAmount = 5000.0
+	} else if err != nil {
+		return fmt.Errorf("failed to retrieve historical limit before %d: %w", targetYear, err)
+	}
+
+	// Auto-fill the target year with the previous year's limit
+	_, err = db.Exec("INSERT INTO tfsa_annual_limits (year, amount) VALUES (?, ?)", targetYear, previousAmount)
+	if err != nil {
+		return fmt.Errorf("failed to auto-insert limit for year %d: %w", targetYear, err)
+	}
+
+	log.Printf("⚠️ Auto-fallback triggered: TFSA limit for %d was missing. Populated using %d limit ($%.2f)", targetYear, previousYear, previousAmount)
+	return nil
+}
+
 func seedAnnualLimits(db *sql.DB) error {
+	// Base historical records (2009 - 2026)
 	limits := map[int]float64{
 		2009: 5000, 2010: 5000, 2011: 5000, 2012: 5000,
 		2013: 5500, 2014: 5500, 2015: 10000, 2016: 5500,
@@ -101,5 +139,14 @@ func seedAnnualLimits(db *sql.DB) error {
 			return err
 		}
 	}
+
+	// Auto-fill up to the current wall-clock year during server startup
+	currentYear := time.Now().Year()
+	for y := 2009; y <= currentYear; y++ {
+		if err := EnsureAnnualLimitExists(db, y); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
