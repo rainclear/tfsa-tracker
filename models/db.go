@@ -31,7 +31,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to seed annual limits: %w", err)
 	}
 
-	log.Println("✅ SQLite database initialized with CENTS Integer Money Representation")
+	log.Println("✅ SQLite database initialized with CENTS Integer Money Representation and Performance Indexes")
 	return db, nil
 }
 
@@ -68,6 +68,9 @@ func createTables(db *sql.DB) error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
+	-- Composite index to speed up yearly aggregation queries
+	CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
+
 	-- Stores limit as INTEGER cents
 	CREATE TABLE IF NOT EXISTS tfsa_annual_limits (
 		year INTEGER PRIMARY KEY,
@@ -85,9 +88,7 @@ func createTables(db *sql.DB) error {
 	return err
 }
 
-// Automatically migrates old float/REAL values in SQLite to integer cents
 func migrateREALToCents(db *sql.DB) error {
-	// Check if transactions table contains REAL data (by checking typeof value)
 	var txType string
 	err := db.QueryRow(`SELECT typeof(amount) FROM transactions LIMIT 1`).Scan(&txType)
 	if err == nil && txType == "real" {
@@ -107,6 +108,7 @@ func migrateREALToCents(db *sql.DB) error {
 			SELECT id, user_id, type, CAST(ROUND(amount * 100) AS INTEGER), date, note, created_at FROM transactions;
 			DROP TABLE transactions;
 			ALTER TABLE transactions_new RENAME TO transactions;
+			CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
 		`)
 		if err != nil {
 			return fmt.Errorf("failed to migrate transactions: %w", err)
@@ -166,7 +168,6 @@ func EnsureAnnualLimitExists(db *sql.DB, targetYear int) error {
 }
 
 func seedAnnualLimits(db *sql.DB) error {
-	// Base historical records in CENTS
 	limits := map[int]int64{
 		2009: 500000, 2010: 500000, 2011: 500000, 2012: 500000,
 		2013: 550000, 2014: 550000, 2015: 1000000, 2016: 550000,
@@ -187,7 +188,13 @@ func seedAnnualLimits(db *sql.DB) error {
 		}
 	}
 
-	currentYear := time.Now().Year()
+	// Use Toronto timezone for current year boundary check
+	loc, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		loc = time.UTC
+	}
+	currentYear := time.Now().In(loc).Year()
+
 	for y := 2009; y <= currentYear; y++ {
 		if err := EnsureAnnualLimitExists(db, y); err != nil {
 			return err

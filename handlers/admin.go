@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"embed"
 	"html/template"
-	"math"
 	"net/http"
 	"strconv"
 
 	"tfsa-tracker/models"
+	"tfsa-tracker/utils"
 )
 
 //go:embed templates/admin.html
@@ -86,10 +86,15 @@ func (h *AdminHandler) ApproveUser(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) UpdateAnnualLimit(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		year, _ := strconv.Atoi(r.FormValue("year"))
-		amountFloat, _ := strconv.ParseFloat(r.FormValue("amount"), 64)
-		amountCents := int64(math.Round(amountFloat * 100)) // Convert $7000.00 to 700000 cents
+		amountStr := r.FormValue("amount")
 
-		if year >= 2009 && amountCents >= 0 {
+		amountCents, err := utils.DollarsToCents(amountStr)
+		if err != nil {
+			http.Error(w, "Invalid amount format: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if year >= 2009 {
 			_, err := h.DB.Exec(`
 				INSERT INTO tfsa_annual_limits (year, amount) VALUES (?, ?)
 				ON CONFLICT(year) DO UPDATE SET amount = excluded.amount

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"embed"
 	"html/template"
-	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"tfsa-tracker/auth"
 	"tfsa-tracker/models"
 	"tfsa-tracker/services"
+	"tfsa-tracker/utils"
 )
 
 //go:embed templates/dashboard.html
@@ -101,7 +101,6 @@ func (h *TFSAHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Inside AddTransaction in handlers/tfsa.go
 func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
@@ -111,16 +110,22 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		txType := models.TransactionType(r.FormValue("type"))
-		amountFloat, _ := strconv.ParseFloat(r.FormValue("amount"), 64)
-		amountCents := int64(math.Round(amountFloat * 100)) // Convert $101.23 to 10123
+		amountStr := r.FormValue("amount")
+
+		amountCents, err := utils.DollarsToCents(amountStr)
+		if err != nil {
+			http.Error(w, "Invalid amount format: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		dateStr := r.FormValue("date")
 		note := r.FormValue("note")
 
 		if dateStr == "" {
-			dateStr = time.Now().Format("2006-01-02")
+			dateStr = time.Now().In(h.Service.Loc).Format("2006-01-02")
 		}
 
-		err := h.Service.AddTransaction(userID, txType, amountCents, dateStr, note)
+		err = h.Service.AddTransaction(userID, txType, amountCents, dateStr, note)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

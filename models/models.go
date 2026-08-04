@@ -58,3 +58,10 @@ type AnnualLimit struct {
 func (a AnnualLimit) AmountInDollars() float64 {
 	return float64(a.Amount) / 100.0
 }
+
+func (t Transaction) FormattedDate() string {
+	if len(t.Date) >= 10 {
+		return t.Date[:10]
+	}
+	return t.Date
+}

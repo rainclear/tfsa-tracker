@@ -10,11 +10,20 @@ import (
 )
 
 type TFSAService struct {
-	DB *sql.DB
+	DB  *sql.DB
+	Loc *time.Location
 }
 
 func NewTFSAService(db *sql.DB) *TFSAService {
-	return &TFSAService{DB: db}
+	loc, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		log.Printf("Warning: Could not load America/Toronto location, falling back to UTC: %v", err)
+		loc = time.UTC
+	}
+	return &TFSAService{
+		DB:  db,
+		Loc: loc,
+	}
 }
 
 func (s *TFSAService) GetAnnualLimits() (map[int]int64, error) {
@@ -111,7 +120,7 @@ func (s *TFSAService) CalculateSummaryForYear(userID int64, targetYear int) (*mo
 }
 
 func (s *TFSAService) CalculateCurrentSummary(userID int64) (*models.TFSASummary, error) {
-	currentYear := time.Now().Year()
+	currentYear := time.Now().In(s.Loc).Year()
 	return s.CalculateSummaryForYear(userID, currentYear)
 }
 
@@ -138,10 +147,13 @@ func (s *TFSAService) GetUserTransactions(userID int64) ([]models.Transaction, e
 	return txs, nil
 }
 
-// AddTransaction converts user dollar float inputs to int64 cents before storing
 func (s *TFSAService) AddTransaction(userID int64, txType models.TransactionType, amountCents int64, dateStr, note string) error {
 	if amountCents <= 0 {
 		return fmt.Errorf("amount must be greater than zero")
+	}
+
+	if dateStr == "" {
+		dateStr = time.Now().In(s.Loc).Format("2006-01-02")
 	}
 
 	_, err := s.DB.Exec(`
