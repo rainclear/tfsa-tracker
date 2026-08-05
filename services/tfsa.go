@@ -418,10 +418,16 @@ func (s *TFSAService) ExportTransactionsCSV(userID int64, w io.Writer) error {
 	for rows.Next() {
 		var txType string
 		var amountCents int64
-		var dateStr, acctName, acctCraName string
+		var rawDate, acctName, acctCraName string
 
-		if err := rows.Scan(&txType, &amountCents, &dateStr, &acctName, &acctCraName); err != nil {
+		if err := rows.Scan(&txType, &amountCents, &rawDate, &acctName, &acctCraName); err != nil {
 			return fmt.Errorf("failed to scan transaction row: %w", err)
+		}
+
+		// 只截取前 10 个字符 (YYYY-MM-DD)，去掉时间戳部分 (T00:00:00Z)
+		cleanDate := strings.TrimSpace(rawDate)
+		if len(cleanDate) >= 10 {
+			cleanDate = cleanDate[:10]
 		}
 
 		formattedAmount := fmt.Sprintf("$%.2f", float64(amountCents)/100.0)
@@ -437,12 +443,12 @@ func (s *TFSAService) ExportTransactionsCSV(userID int64, w io.Writer) error {
 
 		record := []string{
 			strconv.Itoa(index),
-			dateStr,
+			cleanDate, // 使用清理后的日期 2015-08-10
 			acctName,
 			acctCraName,
 			depositVal,
 			withdrawalVal,
-			"", // Explanatory note column left empty
+			"",
 		}
 
 		if err := writer.Write(record); err != nil {
