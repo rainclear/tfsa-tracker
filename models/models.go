@@ -38,7 +38,7 @@ type Transaction struct {
 	ID          int64           `json:"id"`
 	UserID      int64           `json:"user_id"`
 	AccountID   int64           `json:"account_id"`
-	AccountName string          `json:"account_name"` // Joined field for UI display
+	AccountName string          `json:"account_name"`
 	Type        TransactionType `json:"type"`
 	Amount      int64           `json:"amount"` // Stored in CENTS
 	Date        string          `json:"date"`
@@ -72,6 +72,23 @@ func (s TFSASummary) RemainingRoomDollars() float64   { return float64(s.Remaini
 func (s TFSASummary) TotalDepositedDollars() float64  { return float64(s.TotalDeposited) / 100.0 }
 func (s TFSASummary) TotalWithdrawnDollars() float64  { return float64(s.TotalWithdrawn) / 100.0 }
 func (s TFSASummary) NewRoomThisYearDollars() float64 { return float64(s.NewRoomThisYear) / 100.0 }
+
+// YearlyCheckingRow represents a row in the dynamic Yearly Checking view
+type YearlyCheckingRow struct {
+	Year            int   `json:"year"`
+	NewRoom         int64 `json:"new_room"`          // Cents
+	TotalStartRoom  int64 `json:"total_start_room"`  // Cents
+	Deposit         int64 `json:"deposit"`           // Cents
+	Withdrawal      int64 `json:"withdrawal"`        // Cents
+	RemainingRoom   int64 `json:"remaining_room"`    // Cents
+	IsOverLimit     bool  `json:"is_over_limit"`
+}
+
+func (r YearlyCheckingRow) NewRoomDollars() float64        { return float64(r.NewRoom) / 100.0 }
+func (r YearlyCheckingRow) TotalStartRoomDollars() float64 { return float64(r.TotalStartRoom) / 100.0 }
+func (r YearlyCheckingRow) DepositDollars() float64        { return float64(r.Deposit) / 100.0 }
+func (r YearlyCheckingRow) WithdrawalDollars() float64     { return float64(r.Withdrawal) / 100.0 }
+func (r YearlyCheckingRow) RemainingRoomDollars() float64 { return float64(r.RemainingRoom) / 100.0 }
 
 type AnnualLimit struct {
 	Year   int   `json:"year"`

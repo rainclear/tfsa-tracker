@@ -128,6 +128,68 @@ func (s *TFSAService) CalculateCurrentSummary(userID int64) (*models.TFSASummary
 	return s.CalculateSummaryForYear(userID, currentYear)
 }
 
+// CalculateYearlyCheckingHistory dynamically generates full year-by-year TFSA room calculations
+func (s *TFSAService) CalculateYearlyCheckingHistory(userID int64) ([]models.YearlyCheckingRow, error) {
+	user, err := models.GetUserByID(s.DB, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user info: %w", err)
+	}
+
+	startYear := user.StartYear
+	if startYear < 2009 {
+		startYear = 2009
+	}
+	currentYear := time.Now().In(s.Loc).Year()
+
+	for y := startYear; y <= currentYear; y++ {
+		_ = models.EnsureAnnualLimitExists(s.DB, y)
+	}
+
+	limits, err := s.GetAnnualLimits()
+	if err != nil {
+		return nil, err
+	}
+
+	var history []models.YearlyCheckingRow
+	var unusedRoomPrior int64 = 0
+	var priorYearWithdrawals int64 = 0
+
+	for y := startYear; y <= currentYear; y++ {
+		newRoom := limits[y]
+		totalStartRoom := unusedRoomPrior + priorYearWithdrawals + newRoom
+
+		var deposited, withdrawn int64
+		s.DB.QueryRow(`
+			SELECT COALESCE(SUM(CASE WHEN type = 'DEPOSIT' THEN amount ELSE 0 END), 0),
+			       COALESCE(SUM(CASE WHEN type = 'WITHDRAWAL' THEN amount ELSE 0 END), 0)
+			FROM transactions 
+			WHERE user_id = ? AND strftime('%Y', date) = ?
+		`, userID, fmt.Sprintf("%d", y)).Scan(&deposited, &withdrawn)
+
+		remainingRoom := totalStartRoom - deposited
+		isOverLimit := remainingRoom < 0
+
+		history = append(history, models.YearlyCheckingRow{
+			Year:           y,
+			NewRoom:        newRoom,
+			TotalStartRoom: totalStartRoom,
+			Deposit:        deposited,
+			Withdrawal:     withdrawn,
+			RemainingRoom:  remainingRoom,
+			IsOverLimit:    isOverLimit,
+		})
+
+		if remainingRoom < 0 {
+			unusedRoomPrior = 0
+		} else {
+			unusedRoomPrior = remainingRoom
+		}
+		priorYearWithdrawals = withdrawn
+	}
+
+	return history, nil
+}
+
 func (s *TFSAService) GetUserTransactions(userID int64) ([]models.Transaction, error) {
 	rows, err := s.DB.Query(`
 		SELECT t.id, t.user_id, t.account_id, COALESCE(a.account_name, 'Unknown Account'), t.type, t.amount, t.date, t.note, t.created_at 
@@ -184,10 +246,9 @@ func (s *TFSAService) DeleteTransaction(userID, transactionID int64) error {
 	return nil
 }
 
-// ImportTransactionsCSV imports ALL transaction rows in the CSV without filtering potential duplicates.
 func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) (int, error) {
 	reader := csv.NewReader(fileReader)
-	reader.FieldsPerRecord = -1 // Flexible column count
+	reader.FieldsPerRecord = -1
 
 	header, err := reader.Read()
 	if err != nil {
@@ -246,7 +307,6 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 			continue
 		}
 
-		// Ensure account exists or auto-create
 		acctKey := strings.ToLower(acctName)
 		accountID, exists := accountsMap[acctKey]
 		if !exists {
@@ -296,7 +356,6 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 			continue
 		}
 
-		// Direct insertion without duplicate suppression
 		_, err = s.DB.Exec(`
 			INSERT INTO transactions (user_id, account_id, type, amount, date, note)
 			VALUES (?, ?, ?, ?, ?, ?)

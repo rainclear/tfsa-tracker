@@ -55,8 +55,9 @@ func main() {
 	mux.HandleFunc("/logout", authHandler.Logout)
 	mux.HandleFunc("/activate", authHandler.Activate)
 
-	// 3. Protected Dashboard & Account Routes
+	// 3. Protected Dashboard, Account & Yearly Checking Routes
 	mux.HandleFunc("/dashboard", sessionMgr.RequireAuth(tfsaHandler.Dashboard))
+	mux.HandleFunc("/yearly-checking", sessionMgr.RequireAuth(tfsaHandler.YearlyChecking))
 	mux.HandleFunc("/accounts", sessionMgr.RequireAuth(tfsaHandler.AccountsPage))
 	mux.HandleFunc("/accounts/save", sessionMgr.RequireAuth(tfsaHandler.SaveAccount))
 	mux.HandleFunc("/accounts/delete", sessionMgr.RequireAuth(tfsaHandler.DeleteAccount))

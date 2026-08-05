@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yearly Room Checking - TFSA Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <!-- Navbar -->
+    <nav class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl font-bold text-indigo-400">TFSA Tracker</span>
+            <span class="bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2.5 py-1 rounded-full border border-emerald-500/20">Yearly Checking</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <a href="/dashboard" class="text-sm font-medium text-slate-300 hover:text-slate-100 transition">Dashboard</a>
+            <a href="/accounts" class="text-sm font-medium text-slate-300 hover:text-slate-100 transition">Manage Accounts</a>
+            {{if eq .UserRole "ADMIN"}}
+                <a href="/admin" class="text-sm font-medium text-indigo-400 hover:text-indigo-300 transition">Admin Panel</a>
+            {{end}}
+            <a href="/logout" class="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-slate-200 transition">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-6 py-8 space-y-8">
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h3 class="text-xl font-bold text-slate-100">Yearly Contribution Room Checking</h3>
+                    <p class="text-xs text-slate-400 mt-1">Calculated dynamically from your transaction history starting from eligible year {{.User.StartYear}}.</p>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-emerald-900/40 text-emerald-300 text-xs font-semibold border-b border-slate-700 uppercase">
+                            <th class="py-3.5 px-4">Year</th>
+                            <th class="py-3.5 px-4 text-right">New Room</th>
+                            <th class="py-3.5 px-4 text-right">Total Start Room</th>
+                            <th class="py-3.5 px-4 text-right">Deposit</th>
+                            <th class="py-3.5 px-4 text-right">Withdrawal</th>
+                            <th class="py-3.5 px-4 text-right">Remaining Room</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700/50 text-sm">
+                        {{range .Rows}}
+                        <tr class="hover:bg-slate-750 transition">
+                            <td class="py-3 px-4 font-bold text-indigo-400">{{.Year}}</td>
+                            <td class="py-3 px-4 text-right text-slate-300">${{printf "%.2f" .NewRoomDollars}}</td>
+                            <td class="py-3 px-4 text-right text-slate-200 font-medium">${{printf "%.2f" .TotalStartRoomDollars}}</td>
+                            <td class="py-3 px-4 text-right text-indigo-300 font-medium">${{printf "%.2f" .DepositDollars}}</td>
+                            <td class="py-3 px-4 text-right text-amber-300 font-medium">${{printf "%.2f" .WithdrawalDollars}}</td>
+                            <td class="py-3 px-4 text-right font-bold {{if .IsOverLimit}}bg-rose-500/20 text-rose-300 rounded-md border border-rose-500/30{{else}}bg-emerald-500/10 text-emerald-400 rounded-md{{end}}">
+                                ${{printf "%.2f" .RemainingRoomDollars}}
+                            </td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-slate-500">No room history data available.</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

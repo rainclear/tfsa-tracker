@@ -15,13 +15,14 @@ import (
 	"tfsa-tracker/utils"
 )
 
-//go:embed templates/dashboard.html templates/accounts.html
+//go:embed templates/dashboard.html templates/accounts.html templates/yearly_checking.html
 var templateFS embed.FS
 
 type TFSAHandler struct {
-	Service   *services.TFSAService
-	dashboard *template.Template
-	accounts  *template.Template
+	Service        *services.TFSAService
+	dashboard      *template.Template
+	accounts       *template.Template
+	yearlyChecking *template.Template
 }
 
 type DashboardViewData struct {
@@ -40,6 +41,12 @@ type AccountsViewData struct {
 	UserRole models.UserRole
 }
 
+type YearlyCheckingViewData struct {
+	User     *models.User
+	Rows     []models.YearlyCheckingRow
+	UserRole models.UserRole
+}
+
 func NewTFSAHandler(db *sql.DB) *TFSAHandler {
 	dashTmpl, err := template.ParseFS(templateFS, "templates/dashboard.html")
 	if err != nil {
@@ -51,10 +58,16 @@ func NewTFSAHandler(db *sql.DB) *TFSAHandler {
 		panic("Failed to parse embedded accounts template: " + err.Error())
 	}
 
+	yearlyTmpl, err := template.ParseFS(templateFS, "templates/yearly_checking.html")
+	if err != nil {
+		panic("Failed to parse embedded yearly checking template: " + err.Error())
+	}
+
 	return &TFSAHandler{
-		Service:   services.NewTFSAService(db),
-		dashboard: dashTmpl,
-		accounts:  acctTmpl,
+		Service:        services.NewTFSAService(db),
+		dashboard:      dashTmpl,
+		accounts:       acctTmpl,
+		yearlyChecking: yearlyTmpl,
 	}
 }
 
@@ -103,6 +116,39 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.dashboard.Execute(w, data); err != nil {
+		http.Error(w, "Template execution error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *TFSAHandler) YearlyChecking(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	role, _ := r.Context().Value(auth.RoleContextKey).(models.UserRole)
+
+	user, err := models.GetUserByID(h.Service.DB, userID)
+	if err != nil {
+		http.Error(w, "Failed to load user profile", http.StatusInternalServerError)
+		return
+	}
+
+	rows, err := h.Service.CalculateYearlyCheckingHistory(userID)
+	if err != nil {
+		http.Error(w, "Failed to calculate yearly history: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := YearlyCheckingViewData{
+		User:     user,
+		Rows:     rows,
+		UserRole: role,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.yearlyChecking.Execute(w, data); err != nil {
 		http.Error(w, "Template execution error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
