@@ -24,6 +24,18 @@
 
     <main class="max-w-6xl mx-auto px-6 py-8 space-y-8">
         
+        {{if .SuccessMsg}}
+        <div class="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-3 rounded-xl text-sm font-medium">
+            {{.SuccessMsg}}
+        </div>
+        {{end}}
+
+        {{if .ErrMsg}}
+        <div class="bg-rose-500/10 border border-rose-500/20 text-rose-400 px-4 py-3 rounded-xl text-sm font-medium">
+            {{.ErrMsg}}
+        </div>
+        {{end}}
+
         <!-- Summary Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
@@ -83,6 +95,18 @@
                             <input type="text" name="note" placeholder="e.g. Monthly auto-deposit" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
                         </div>
                         <button type="submit" {{if eq (len .Accounts) 0}}disabled class="w-full bg-slate-700 text-slate-500 font-medium py-2 rounded-lg cursor-not-allowed"{{else}}class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg transition shadow-md"{{end}}>Add Transaction</button>
+                    </form>
+                </div>
+
+                <!-- CSV Import Form Card -->
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                    <h3 class="text-lg font-bold text-slate-100 mb-2">Import Transactions CSV</h3>
+                    <p class="text-xs text-slate-400 mb-4">Bulk import transactions from CSV file.</p>
+                    <form action="/transaction/import" method="POST" enctype="multipart/form-data" class="space-y-4">
+                        <div>
+                            <input type="file" name="csv_file" accept=".csv" required class="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-indigo-300 hover:file:bg-slate-600">
+                        </div>
+                        <button type="submit" class="w-full bg-slate-700 hover:bg-slate-600 text-indigo-300 font-medium py-2 rounded-lg transition border border-slate-600 shadow-sm">Upload & Import</button>
                     </form>
                 </div>
 

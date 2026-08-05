@@ -2,11 +2,15 @@ package services
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"log"
+	"strings"
 	"time"
 
 	"tfsa-tracker/models"
+	"tfsa-tracker/utils"
 )
 
 type TFSAService struct {
@@ -163,7 +167,7 @@ func (s *TFSAService) AddTransaction(userID, accountID int64, txType models.Tran
 
 	_, err := s.DB.Exec(`
 		INSERT INTO transactions (user_id, account_id, type, amount, date, note)
-		VALUES (?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?)
 	`, userID, accountID, txType, amountCents, dateStr, note)
 	return err
 }
@@ -178,4 +182,155 @@ func (s *TFSAService) DeleteTransaction(userID, transactionID int64) error {
 		return fmt.Errorf("transaction not found or access denied")
 	}
 	return nil
+}
+
+// ImportTransactionsCSV processes the uploaded CSV file, auto-creates missing accounts, and inserts non-duplicate transactions.
+func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) (int, int, error) {
+	reader := csv.NewReader(fileReader)
+	reader.FieldsPerRecord = -1 // Flexible column reading
+
+	// Read Header
+	header, err := reader.Read()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to read CSV header: %w", err)
+	}
+
+	// Determine column indexes dynamically
+	dateIdx, acctNameIdx, acctCraIdx, depIdx, wdIdx := -1, -1, -1, -1, -1
+	for i, h := range header {
+		cleanH := strings.ToLower(strings.TrimSpace(h))
+		if strings.Contains(cleanH, "transaction date") || cleanH == "date" {
+			dateIdx = i
+		} else if strings.Contains(cleanH, "account name at cra") || cleanH == "account_name_cra" {
+			acctCraIdx = i
+		} else if strings.Contains(cleanH, "account") && acctNameIdx == -1 {
+			acctNameIdx = i
+		} else if strings.Contains(cleanH, "deposit") {
+			depIdx = i
+		} else if strings.Contains(cleanH, "withdrawal") {
+			wdIdx = i
+		}
+	}
+
+	if dateIdx == -1 || acctNameIdx == -1 || acctCraIdx == -1 || depIdx == -1 || wdIdx == -1 {
+		return 0, 0, fmt.Errorf("CSV missing required columns. Required: Transaction Date, Account Name, Account Name at CRA, Deposit, Withdrawal")
+	}
+
+	// Cache user accounts for fast lookup
+	accountsMap := make(map[string]int64)
+	existingAccounts, err := models.GetUserAccounts(s.DB, userID)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, a := range existingAccounts {
+		accountsMap[strings.ToLower(a.AccountName)] = a.ID
+	}
+
+	importedCount := 0
+	skippedCount := 0
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue
+		}
+
+		if len(record) <= dateIdx || len(record) <= acctNameIdx || len(record) <= acctCraIdx {
+			continue
+		}
+
+		dateStr := strings.TrimSpace(record[dateIdx])
+		acctName := strings.TrimSpace(record[acctNameIdx])
+		acctCraName := strings.TrimSpace(record[acctCraIdx])
+
+		if dateStr == "" || acctName == "" {
+			continue
+		}
+
+		// Ensure account exists or auto-create
+		acctKey := strings.ToLower(acctName)
+		accountID, exists := accountsMap[acctKey]
+		if !exists {
+			inst := acctName
+			if parts := strings.Split(acctName, " "); len(parts) > 0 {
+				inst = parts[0]
+			}
+
+			newAcct := models.Account{
+				UserID:         userID,
+				AccountName:    acctName,
+				AccountNameCRA: acctCraName,
+				AccountType:    "TFSA",
+				Institution:    inst,
+				Notes:          "Auto-created from CSV import",
+			}
+
+			if err := models.AddAccount(s.DB, &newAcct); err != nil {
+				// Retry fetching if concurrent addition occurred
+				_ = s.DB.QueryRow(`SELECT id FROM accounts WHERE user_id = ? AND account_name = ?`, userID, acctName).Scan(&accountID)
+			} else {
+				_ = s.DB.QueryRow(`SELECT id FROM accounts WHERE user_id = ? AND account_name = ?`, userID, acctName).Scan(&accountID)
+			}
+			accountsMap[acctKey] = accountID
+		}
+
+		// Parse Deposit / Withdrawal amounts
+		depStr := ""
+		wdStr := ""
+		if len(record) > depIdx {
+			depStr = cleanCurrencyString(record[depIdx])
+		}
+		if len(record) > wdIdx {
+			wdStr = cleanCurrencyString(record[wdIdx])
+		}
+
+		var txType models.TransactionType
+		var amountCents int64 = 0
+
+		if depStr != "" && depStr != "0" && depStr != "0.00" {
+			txType = models.Deposit
+			amountCents, _ = utils.DollarsToCents(depStr)
+		} else if wdStr != "" && wdStr != "0" && wdStr != "0.00" {
+			txType = models.Withdrawal
+			amountCents, _ = utils.DollarsToCents(wdStr)
+		}
+
+		if amountCents <= 0 {
+			continue
+		}
+
+		// Check for duplicate record (same user, account, type, amount, date)
+		var dupCount int
+		_ = s.DB.QueryRow(`
+			SELECT COUNT(*) FROM transactions 
+			WHERE user_id = ? AND account_id = ? AND type = ? AND amount = ? AND date = ?
+		`, userID, accountID, txType, amountCents, dateStr).Scan(&dupCount)
+
+		if dupCount > 0 {
+			skippedCount++
+			continue
+		}
+
+		// Insert non-duplicate transaction
+		_, err = s.DB.Exec(`
+			INSERT INTO transactions (user_id, account_id, type, amount, date, note)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, userID, accountID, txType, amountCents, dateStr, "Imported from CSV")
+
+		if err == nil {
+			importedCount++
+		}
+	}
+
+	return importedCount, skippedCount, nil
+}
+
+func cleanCurrencyString(val string) string {
+	val = strings.TrimSpace(val)
+	val = strings.ReplaceAll(val, "$", "")
+	val = strings.ReplaceAll(val, ",", "")
+	return val
 }

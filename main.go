@@ -62,6 +62,7 @@ func main() {
 	mux.HandleFunc("/accounts/delete", sessionMgr.RequireAuth(tfsaHandler.DeleteAccount))
 	mux.HandleFunc("/user/profile/update", sessionMgr.RequireAuth(tfsaHandler.UpdateProfile))
 	mux.HandleFunc("/transaction/add", sessionMgr.RequireAuth(tfsaHandler.AddTransaction))
+	mux.HandleFunc("/transaction/import", sessionMgr.RequireAuth(tfsaHandler.ImportCSV))
 	mux.HandleFunc("/transaction/delete", sessionMgr.RequireAuth(tfsaHandler.DeleteTransaction))
 
 	// 4. Protected Admin Routes

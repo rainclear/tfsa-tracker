@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"embed"
+	"fmt"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -29,6 +30,8 @@ type DashboardViewData struct {
 	Summary      *models.TFSASummary
 	Transactions []models.Transaction
 	UserRole     models.UserRole
+	SuccessMsg   string
+	ErrMsg       string
 }
 
 type AccountsViewData struct {
@@ -94,11 +97,39 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		Summary:      summary,
 		Transactions: txs,
 		UserRole:     role,
+		SuccessMsg:   r.URL.Query().Get("success"),
+		ErrMsg:       r.URL.Query().Get("error"),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.dashboard.Execute(w, data); err != nil {
 		http.Error(w, "Template execution error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *TFSAHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		file, _, err := r.FormFile("csv_file")
+		if err != nil {
+			http.Redirect(w, r, "/dashboard?error="+err.Error(), http.StatusSeeOther)
+			return
+		}
+		defer file.Close()
+
+		imported, skipped, err := h.Service.ImportTransactionsCSV(userID, file)
+		if err != nil {
+			http.Redirect(w, r, "/dashboard?error="+err.Error(), http.StatusSeeOther)
+			return
+		}
+
+		msg := fmt.Sprintf("CSV Import Complete! %d transactions imported, %d duplicate rows skipped.", imported, skipped)
+		http.Redirect(w, r, "/dashboard?success="+msg, http.StatusSeeOther)
 	}
 }
 
