@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -379,6 +380,79 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 	}
 
 	return importedCount, nil
+}
+
+func (s *TFSAService) ExportTransactionsCSV(userID int64, w io.Writer) error {
+	// Query transactions ordered by date ASC, then account name ASC
+	rows, err := s.DB.Query(`
+		SELECT t.type, t.amount, t.date, COALESCE(a.account_name, ''), COALESCE(a.account_name_cra, '')
+		FROM transactions t
+		LEFT JOIN accounts a ON t.account_id = a.id
+		WHERE t.user_id = ?
+		ORDER BY t.date ASC, a.account_name ASC, t.id ASC
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("failed to query transactions for export: %w", err)
+	}
+	defer rows.Close()
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	// Write exact header format matching the import CSV template
+	header := []string{
+		"Index (PK)",
+		"Transaction Date",
+		"Account (Dropdown based on Account Name in Accounts Sheet)",
+		"Account Name at CRA (Auto Fill)",
+		"Deposit (Non Negative)",
+		"Withdrawal (Non Negative)",
+		"There cannot be both Contribution and Withdrawal in one transaction",
+	}
+
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("failed to write CSV header: %w", err)
+	}
+
+	index := 1
+	for rows.Next() {
+		var txType string
+		var amountCents int64
+		var dateStr, acctName, acctCraName string
+
+		if err := rows.Scan(&txType, &amountCents, &dateStr, &acctName, &acctCraName); err != nil {
+			return fmt.Errorf("failed to scan transaction row: %w", err)
+		}
+
+		formattedAmount := fmt.Sprintf("$%.2f", float64(amountCents)/100.0)
+
+		depositVal := ""
+		withdrawalVal := ""
+
+		if txType == "DEPOSIT" {
+			depositVal = formattedAmount
+		} else if txType == "WITHDRAWAL" {
+			withdrawalVal = formattedAmount
+		}
+
+		record := []string{
+			strconv.Itoa(index),
+			dateStr,
+			acctName,
+			acctCraName,
+			depositVal,
+			withdrawalVal,
+			"", // Explanatory note column left empty
+		}
+
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("failed to write transaction row to CSV: %w", err)
+		}
+
+		index++
+	}
+
+	return rows.Err()
 }
 
 func max(a, b int) int {

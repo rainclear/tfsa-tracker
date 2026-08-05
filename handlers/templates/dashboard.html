@@ -99,18 +99,25 @@
                     </form>
                 </div>
 
-                <!-- CSV Import Form Card -->
+                <!-- CSV Import & Export Card -->
                 <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
-                    <h3 class="text-lg font-bold text-slate-100 mb-2">Import Transactions CSV</h3>
-                    <p class="text-xs text-slate-400 mb-4">Bulk import transactions from CSV file.</p>
-                    <form action="/transaction/import" method="POST" enctype="multipart/form-data" class="space-y-4">
+                    <h3 class="text-lg font-bold text-slate-100 mb-2">Import / Export CSV</h3>
+                    <p class="text-xs text-slate-400 mb-4">Bulk import transactions or export your current ledger.</p>
+                    
+                    <form action="/transaction/import" method="POST" enctype="multipart/form-data" class="space-y-3 mb-4">
                         <div>
                             <input type="file" name="csv_file" accept=".csv" required class="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-indigo-300 hover:file:bg-slate-600">
                         </div>
                         <button type="submit" class="w-full bg-slate-700 hover:bg-slate-600 text-indigo-300 font-medium py-2 rounded-lg transition border border-slate-600 shadow-sm">Upload & Import</button>
                     </form>
-                </div>
 
+                    <div class="border-t border-slate-700/60 pt-3">
+                        <a href="/transaction/export" class="block w-full text-center bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-medium py-2 rounded-lg transition border border-emerald-500/30 text-sm">
+                            Export Transactions CSV
+                        </a>
+                    </div>
+                </div>
+                
                 <!-- User Profile Settings Card -->
                 <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                     <h3 class="text-lg font-bold text-slate-100 mb-4">User Settings</h3>
