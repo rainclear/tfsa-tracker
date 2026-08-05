@@ -122,13 +122,13 @@ func (h *TFSAHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 		}
 		defer file.Close()
 
-		imported, skipped, err := h.Service.ImportTransactionsCSV(userID, file)
+		imported, err := h.Service.ImportTransactionsCSV(userID, file)
 		if err != nil {
 			http.Redirect(w, r, "/dashboard?error="+err.Error(), http.StatusSeeOther)
 			return
 		}
 
-		msg := fmt.Sprintf("CSV Import Complete! %d transactions imported, %d duplicate rows skipped.", imported, skipped)
+		msg := fmt.Sprintf("CSV Import Complete! %d transactions imported.", imported)
 		http.Redirect(w, r, "/dashboard?success="+msg, http.StatusSeeOther)
 	}
 }
