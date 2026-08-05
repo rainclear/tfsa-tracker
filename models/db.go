@@ -23,11 +23,16 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
 
+	// Auto-migrate schema for existing production databases
+	if err := migrateDatabaseSchema(db); err != nil {
+		return nil, fmt.Errorf("failed to migrate database schema: %w", err)
+	}
+
 	if err := seedAnnualLimits(db); err != nil {
 		return nil, fmt.Errorf("failed to seed annual limits: %w", err)
 	}
 
-	log.Println("✅ Database initialized with multi-account support and per-user unique constraints")
+	log.Println("✅ Database initialized and migrated successfully")
 	return db, nil
 }
 
@@ -52,7 +57,6 @@ func createTables(db *sql.DB) error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
-	-- Accounts Table linked to User with per-user unique account & CRA names
 	CREATE TABLE IF NOT EXISTS accounts (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id INTEGER NOT NULL,
@@ -70,25 +74,6 @@ func createTables(db *sql.DB) error {
 		UNIQUE(user_id, account_name_cra)
 	);
 
-	-- Transactions Table linked to Account and User
-	CREATE TABLE IF NOT EXISTS transactions (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		user_id INTEGER NOT NULL,
-		account_id INTEGER NOT NULL,
-		type TEXT NOT NULL CHECK(type IN ('DEPOSIT', 'WITHDRAWAL')),
-		amount INTEGER NOT NULL CHECK(amount > 0), -- Stored in CENTS
-		date DATE NOT NULL,
-		note TEXT DEFAULT '',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-		FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
-	);
-
-	-- Indexes for query performance
-	CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
-	CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
-	CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
-
 	CREATE TABLE IF NOT EXISTS tfsa_annual_limits (
 		year INTEGER PRIMARY KEY,
 		amount INTEGER NOT NULL
@@ -102,6 +87,113 @@ func createTables(db *sql.DB) error {
 	INSERT OR IGNORE INTO system_settings (key, value) VALUES ('registration_enabled', 'true');
 	`
 	_, err := db.Exec(schema)
+	return err
+}
+
+// Automatically inspects and updates older schemas safely
+func migrateDatabaseSchema(db *sql.DB) error {
+	// 1. Check if transactions table exists and whether it lacks account_id
+	var hasAccountId bool = false
+	rows, err := db.Query(`PRAGMA table_info(transactions)`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var cid int
+			var name, ctype string
+			var notnull, pk int
+			var dflt sql.NullString
+			if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err == nil {
+				if name == "account_id" {
+					hasAccountId = true
+					break
+				}
+			}
+		}
+	}
+
+	// 2. If transactions exists without account_id, perform structural migration
+	if !hasAccountId {
+		var txCount int
+		_ = db.QueryRow(`SELECT COUNT(*) FROM transactions`).Scan(&txCount)
+
+		if txCount > 0 {
+			log.Println("🔄 Existing transactions table detected without account_id. Performing dynamic migration...")
+
+			// Disable foreign keys temporarily during table copy
+			if _, err := db.Exec(`PRAGMA foreign_keys=OFF;`); err != nil {
+				return err
+			}
+
+			// Create a default legacy account for all users who have existing transactions
+			_, err = db.Exec(`
+				INSERT OR IGNORE INTO accounts (user_id, account_name, account_name_cra, institution, notes)
+				SELECT DISTINCT user_id, 'Primary TFSA Account', 'PRIMARY TFSA', 'Default Institution', 'Migrated during system update'
+				FROM transactions;
+			`)
+			if err != nil {
+				return fmt.Errorf("failed to create default accounts for migration: %w", err)
+			}
+
+			// Create replacement transactions table
+			_, err = db.Exec(`
+				CREATE TABLE transactions_new (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL,
+					account_id INTEGER NOT NULL,
+					type TEXT NOT NULL CHECK(type IN ('DEPOSIT', 'WITHDRAWAL')),
+					amount INTEGER NOT NULL CHECK(amount > 0),
+					date DATE NOT NULL,
+					note TEXT DEFAULT '',
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+					FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+				);
+
+				INSERT INTO transactions_new (id, user_id, account_id, type, amount, date, note, created_at)
+				SELECT t.id, t.user_id, a.id, t.type, 
+				       CASE WHEN typeof(t.amount) = 'real' THEN CAST(ROUND(t.amount * 100) AS INTEGER) ELSE t.amount END,
+				       t.date, t.note, t.created_at
+				FROM transactions t
+				JOIN accounts a ON t.user_id = a.user_id AND a.account_name = 'Primary TFSA Account';
+
+				DROP TABLE transactions;
+				ALTER TABLE transactions_new RENAME TO transactions;
+
+				PRAGMA foreign_keys=ON;
+			`)
+			if err != nil {
+				return fmt.Errorf("failed to rebuild transactions table: %w", err)
+			}
+			log.Println("✅ Successfully migrated legacy transactions to multi-account structure.")
+		} else {
+			// If table is empty or fresh, construct proper table directly
+			_, _ = db.Exec(`DROP TABLE IF EXISTS transactions;`)
+			_, err = db.Exec(`
+				CREATE TABLE transactions (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL,
+					account_id INTEGER NOT NULL,
+					type TEXT NOT NULL CHECK(type IN ('DEPOSIT', 'WITHDRAWAL')),
+					amount INTEGER NOT NULL CHECK(amount > 0),
+					date DATE NOT NULL,
+					note TEXT DEFAULT '',
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+					FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+				);
+			`)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// 3. Re-create indexes
+	_, err = db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
+		CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
+		CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
+	`)
 	return err
 }
 
