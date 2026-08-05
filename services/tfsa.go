@@ -128,7 +128,6 @@ func (s *TFSAService) CalculateCurrentSummary(userID int64) (*models.TFSASummary
 	return s.CalculateSummaryForYear(userID, currentYear)
 }
 
-// CalculateYearlyCheckingHistory dynamically generates full year-by-year TFSA room calculations
 func (s *TFSAService) CalculateYearlyCheckingHistory(userID int64) ([]models.YearlyCheckingRow, error) {
 	user, err := models.GetUserByID(s.DB, userID)
 	if err != nil {
@@ -246,7 +245,6 @@ func (s *TFSAService) DeleteTransaction(userID, transactionID int64) error {
 	return nil
 }
 
-// ImportTransactionsCSV imports Deposit and Withdrawal amounts independently for each record
 func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) (int, error) {
 	reader := csv.NewReader(fileReader)
 	reader.FieldsPerRecord = -1
@@ -257,23 +255,38 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 	}
 
 	dateIdx, acctNameIdx, acctCraIdx, depIdx, wdIdx := -1, -1, -1, -1, -1
+
 	for i, h := range header {
 		cleanH := strings.ToLower(strings.TrimSpace(h))
-		if strings.Contains(cleanH, "transaction date") || cleanH == "date" {
-			dateIdx = i
-		} else if strings.Contains(cleanH, "account name at cra") || cleanH == "account_name_cra" {
+
+		// Check for CRA Account Name first to avoid collision with standard Account Name
+		if strings.Contains(cleanH, "account name at cra") || cleanH == "account_name_cra" {
 			acctCraIdx = i
+		} else if strings.Contains(cleanH, "transaction date") || cleanH == "date" {
+			dateIdx = i
+		} else if strings.HasPrefix(cleanH, "deposit") || cleanH == "deposit" {
+			depIdx = i
+		} else if strings.HasPrefix(cleanH, "withdrawal") || cleanH == "withdrawal" {
+			wdIdx = i
 		} else if strings.Contains(cleanH, "account") && acctNameIdx == -1 {
 			acctNameIdx = i
-		} else if strings.Contains(cleanH, "deposit") {
-			depIdx = i
-		} else if strings.Contains(cleanH, "withdrawal") {
-			wdIdx = i
+		}
+	}
+
+	// Fallbacks if exact headers were slightly different
+	if wdIdx == -1 {
+		for i, h := range header {
+			cleanH := strings.ToLower(strings.TrimSpace(h))
+			if strings.Contains(cleanH, "withdrawal") && !strings.Contains(cleanH, "there cannot be") {
+				wdIdx = i
+				break
+			}
 		}
 	}
 
 	if dateIdx == -1 || acctNameIdx == -1 || acctCraIdx == -1 || depIdx == -1 || wdIdx == -1 {
-		return 0, fmt.Errorf("CSV missing required columns. Required: Transaction Date, Account Name, Account Name at CRA, Deposit, Withdrawal")
+		return 0, fmt.Errorf("CSV missing required columns. Header identified -> Date: %d, Account: %d, CRA Name: %d, Deposit: %d, Withdrawal: %d",
+			dateIdx, acctNameIdx, acctCraIdx, depIdx, wdIdx)
 	}
 
 	accountsMap := make(map[string]int64)
@@ -296,7 +309,8 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 			continue
 		}
 
-		if len(record) <= dateIdx || len(record) <= acctNameIdx || len(record) <= acctCraIdx {
+		maxRequiredIdx := max(dateIdx, max(acctNameIdx, max(acctCraIdx, max(depIdx, wdIdx))))
+		if len(record) <= maxRequiredIdx {
 			continue
 		}
 
@@ -308,7 +322,6 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 			continue
 		}
 
-		// 保证账号存在或自动创建
 		acctKey := strings.ToLower(acctName)
 		accountID, exists := accountsMap[acctKey]
 		if !exists {
@@ -334,34 +347,32 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 			accountsMap[acctKey] = accountID
 		}
 
-		// 1. 独立检查并录入 Deposit 记录
-		if len(record) > depIdx {
-			depStr := cleanCurrencyString(record[depIdx])
-			if depStr != "" && depStr != "0" && depStr != "0.00" {
-				if depCents, err := utils.DollarsToCents(depStr); err == nil && depCents > 0 {
-					_, err = s.DB.Exec(`
-						INSERT INTO transactions (user_id, account_id, type, amount, date, note)
-						VALUES (?, ?, ?, ?, ?, ?)
-					`, userID, accountID, models.Deposit, depCents, dateStr, "Imported from CSV")
-					if err == nil {
-						importedCount++
-					}
+		// 1. Process Deposit
+		depStr := cleanCurrencyString(record[depIdx])
+		if depStr != "" && depStr != "0" && depStr != "0.00" {
+			depCents, err := utils.DollarsToCents(depStr)
+			if err == nil && depCents > 0 {
+				_, err = s.DB.Exec(`
+					INSERT INTO transactions (user_id, account_id, type, amount, date, note)
+					VALUES (?, ?, 'DEPOSIT', ?, ?, ?)
+				`, userID, accountID, depCents, dateStr, "Imported from CSV")
+				if err == nil {
+					importedCount++
 				}
 			}
 		}
 
-		// 2. 独立检查并录入 Withdrawal 记录
-		if len(record) > wdIdx {
-			wdStr := cleanCurrencyString(record[wdIdx])
-			if wdStr != "" && wdStr != "0" && wdStr != "0.00" {
-				if wdCents, err := utils.DollarsToCents(wdStr); err == nil && wdCents > 0 {
-					_, err = s.DB.Exec(`
-						INSERT INTO transactions (user_id, account_id, type, amount, date, note)
-						VALUES (?, ?, ?, ?, ?, ?)
-					`, userID, accountID, models.Withdrawal, wdCents, dateStr, "Imported from CSV")
-					if err == nil {
-						importedCount++
-					}
+		// 2. Process Withdrawal
+		wdStr := cleanCurrencyString(record[wdIdx])
+		if wdStr != "" && wdStr != "0" && wdStr != "0.00" {
+			wdCents, err := utils.DollarsToCents(wdStr)
+			if err == nil && wdCents > 0 {
+				_, err = s.DB.Exec(`
+					INSERT INTO transactions (user_id, account_id, type, amount, date, note)
+					VALUES (?, ?, 'WITHDRAWAL', ?, ?, ?)
+				`, userID, accountID, wdCents, dateStr, "Imported from CSV")
+				if err == nil {
+					importedCount++
 				}
 			}
 		}
@@ -370,9 +381,17 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 	return importedCount, nil
 }
 
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func cleanCurrencyString(val string) string {
 	val = strings.TrimSpace(val)
 	val = strings.ReplaceAll(val, "$", "")
 	val = strings.ReplaceAll(val, ",", "")
+	val = strings.ReplaceAll(val, "\"", "")
 	return val
 }
