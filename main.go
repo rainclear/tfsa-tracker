@@ -65,6 +65,7 @@ func main() {
 	mux.HandleFunc("/admin", sessionMgr.RequireAdmin(adminHandler.AdminPanel))
 	mux.HandleFunc("/admin/approve", sessionMgr.RequireAdmin(adminHandler.ApproveUser))
 	mux.HandleFunc("/admin/limit/update", sessionMgr.RequireAdmin(adminHandler.UpdateAnnualLimit))
+	mux.HandleFunc("/admin/limit/delete", sessionMgr.RequireAdmin(adminHandler.DeleteAnnualLimit))
 
 	port := os.Getenv("PORT")
 	if port == "" {
