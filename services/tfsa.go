@@ -246,6 +246,7 @@ func (s *TFSAService) DeleteTransaction(userID, transactionID int64) error {
 	return nil
 }
 
+// ImportTransactionsCSV imports Deposit and Withdrawal amounts independently for each record
 func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) (int, error) {
 	reader := csv.NewReader(fileReader)
 	reader.FieldsPerRecord = -1
@@ -307,6 +308,7 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 			continue
 		}
 
+		// 保证账号存在或自动创建
 		acctKey := strings.ToLower(acctName)
 		accountID, exists := accountsMap[acctKey]
 		if !exists {
@@ -332,37 +334,36 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 			accountsMap[acctKey] = accountID
 		}
 
-		depStr := ""
-		wdStr := ""
+		// 1. 独立检查并录入 Deposit 记录
 		if len(record) > depIdx {
-			depStr = cleanCurrencyString(record[depIdx])
+			depStr := cleanCurrencyString(record[depIdx])
+			if depStr != "" && depStr != "0" && depStr != "0.00" {
+				if depCents, err := utils.DollarsToCents(depStr); err == nil && depCents > 0 {
+					_, err = s.DB.Exec(`
+						INSERT INTO transactions (user_id, account_id, type, amount, date, note)
+						VALUES (?, ?, ?, ?, ?, ?)
+					`, userID, accountID, models.Deposit, depCents, dateStr, "Imported from CSV")
+					if err == nil {
+						importedCount++
+					}
+				}
+			}
 		}
+
+		// 2. 独立检查并录入 Withdrawal 记录
 		if len(record) > wdIdx {
-			wdStr = cleanCurrencyString(record[wdIdx])
-		}
-
-		var txType models.TransactionType
-		var amountCents int64 = 0
-
-		if depStr != "" && depStr != "0" && depStr != "0.00" {
-			txType = models.Deposit
-			amountCents, _ = utils.DollarsToCents(depStr)
-		} else if wdStr != "" && wdStr != "0" && wdStr != "0.00" {
-			txType = models.Withdrawal
-			amountCents, _ = utils.DollarsToCents(wdStr)
-		}
-
-		if amountCents <= 0 {
-			continue
-		}
-
-		_, err = s.DB.Exec(`
-			INSERT INTO transactions (user_id, account_id, type, amount, date, note)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, userID, accountID, txType, amountCents, dateStr, "Imported from CSV")
-
-		if err == nil {
-			importedCount++
+			wdStr := cleanCurrencyString(record[wdIdx])
+			if wdStr != "" && wdStr != "0" && wdStr != "0.00" {
+				if wdCents, err := utils.DollarsToCents(wdStr); err == nil && wdCents > 0 {
+					_, err = s.DB.Exec(`
+						INSERT INTO transactions (user_id, account_id, type, amount, date, note)
+						VALUES (?, ?, ?, ?, ?, ?)
+					`, userID, accountID, models.Withdrawal, wdCents, dateStr, "Imported from CSV")
+					if err == nil {
+						importedCount++
+					}
+				}
+			}
 		}
 	}
 
