@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Accounts - TFSA Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <nav class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl font-bold text-indigo-400">TFSA Tracker</span>
+            <span class="bg-indigo-500/10 text-indigo-400 text-xs font-semibold px-2.5 py-1 rounded-full border border-indigo-500/20">Account Management</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <a href="/dashboard" class="text-sm font-medium text-slate-300 hover:text-slate-100 transition">Dashboard</a>
+            <a href="/logout" class="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-slate-200 transition">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-6 py-8 space-y-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Side: Add / Edit Form Card -->
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm h-fit">
+                <h3 id="formTitle" class="text-lg font-bold text-slate-100 mb-2">Add New Account</h3>
+                <p class="text-xs text-slate-400 mb-4">Register a TFSA financial institution account.</p>
+                
+                <form id="accountForm" action="/accounts/save" method="POST" class="space-y-4">
+                    <input type="hidden" name="id" id="acct_id" value="0">
+                    
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Account Display Name *</label>
+                        <input type="text" name="account_name" id="acct_name" required placeholder="e.g. Wealthsimple TFSA Trade" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">CRA Official Account Name *</label>
+                        <input type="text" name="account_name_cra" id="acct_name_cra" required placeholder="e.g. WEALTHSIMPLE INVESTMENTS INC." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Institution</label>
+                            <input type="text" name="institution" id="acct_institution" placeholder="Wealthsimple" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Account Number</label>
+                            <input type="text" name="account_number" id="acct_number" placeholder="H1234567" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Opening Date</label>
+                            <input type="date" name="opening_date" id="acct_opening" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Close Date</label>
+                            <input type="date" name="close_date" id="acct_close" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Notes</label>
+                        <textarea name="notes" id="acct_notes" rows="2" placeholder="Optional notes..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500"></textarea>
+                    </div>
+
+                    <div class="flex space-x-2 pt-2">
+                        <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg transition shadow-md">Save Account</button>
+                        <button type="button" onclick="resetForm()" class="bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium px-4 py-2 rounded-lg transition">Clear</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Right Side: Account List Table -->
+            <div class="lg:col-span-2 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                <h3 class="text-lg font-bold text-slate-100 mb-4">Your TFSA Accounts</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-700 text-xs font-medium text-slate-400 uppercase">
+                                <th class="py-3 px-2">Account</th>
+                                <th class="py-3 px-2">CRA Name</th>
+                                <th class="py-3 px-2">Institution</th>
+                                <th class="py-3 px-2">Acct #</th>
+                                <th class="py-3 px-2 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700/50 text-sm">
+                            {{range .Accounts}}
+                            <tr class="hover:bg-slate-750 transition">
+                                <td class="py-3 px-2 font-semibold text-indigo-400">{{.AccountName}}</td>
+                                <td class="py-3 px-2 text-slate-300 text-xs">{{.AccountNameCRA}}</td>
+                                <td class="py-3 px-2 text-slate-200">{{.Institution}}</td>
+                                <td class="py-3 px-2 text-slate-400 font-mono text-xs">{{.AccountNumber}}</td>
+                                <td class="py-3 px-2 text-right space-x-2">
+                                    <button type="button" onclick="editAccount({{.ID}}, {{.AccountName}}, {{.AccountNameCRA}}, {{.Institution}}, {{.AccountNumber}}, {{.OpeningDate}}, {{.CloseDate}}, {{.Notes}})" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">Edit</button>
+                                    <form action="/accounts/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete account {{.AccountName}}? All associated transactions will be permanently deleted.');">
+                                        <input type="hidden" name="id" value="{{.ID}}">
+                                        <button type="submit" class="text-xs text-rose-400 hover:text-rose-300 font-medium">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {{else}}
+                            <tr>
+                                <td colspan="5" class="py-8 text-center text-slate-500">No registered accounts found. Add your first account on the left.</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function editAccount(id, name, craName, inst, num, openDate, closeDate, notes) {
+            document.getElementById('formTitle').innerText = 'Edit Account';
+            document.getElementById('acct_id').value = id;
+            document.getElementById('acct_name').value = name;
+            document.getElementById('acct_name_cra').value = craName;
+            document.getElementById('acct_institution').value = inst;
+            document.getElementById('acct_number').value = num;
+            document.getElementById('acct_opening').value = openDate;
+            document.getElementById('acct_close').value = closeDate;
+            document.getElementById('acct_notes').value = notes;
+        }
+
+        function resetForm() {
+            document.getElementById('formTitle').innerText = 'Add New Account';
+            document.getElementById('acct_id').value = '0';
+            document.getElementById('accountForm').reset();
+        }
+    </script>
+</body>
+</html>

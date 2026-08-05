@@ -23,15 +23,11 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
 
-	if err := migrateREALToCents(db); err != nil {
-		log.Printf("Migration warning: %v", err)
-	}
-
 	if err := seedAnnualLimits(db); err != nil {
 		return nil, fmt.Errorf("failed to seed annual limits: %w", err)
 	}
 
-	log.Println("✅ SQLite database initialized with CENTS Integer Money Representation and Performance Indexes")
+	log.Println("✅ Database initialized with multi-account support and per-user unique constraints")
 	return db, nil
 }
 
@@ -56,22 +52,43 @@ func createTables(db *sql.DB) error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
-	-- Stores amount as INTEGER cents
+	-- Accounts Table linked to User with per-user unique account & CRA names
+	CREATE TABLE IF NOT EXISTS accounts (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		account_name TEXT NOT NULL,
+		account_name_cra TEXT NOT NULL,
+		account_type TEXT DEFAULT 'TFSA',
+		institution TEXT DEFAULT '',
+		account_number TEXT DEFAULT '',
+		opening_date DATE,
+		close_date DATE,
+		notes TEXT DEFAULT '',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+		UNIQUE(user_id, account_name),
+		UNIQUE(user_id, account_name_cra)
+	);
+
+	-- Transactions Table linked to Account and User
 	CREATE TABLE IF NOT EXISTS transactions (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id INTEGER NOT NULL,
+		account_id INTEGER NOT NULL,
 		type TEXT NOT NULL CHECK(type IN ('DEPOSIT', 'WITHDRAWAL')),
-		amount INTEGER NOT NULL CHECK(amount > 0),
+		amount INTEGER NOT NULL CHECK(amount > 0), -- Stored in CENTS
 		date DATE NOT NULL,
 		note TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+		FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 	);
 
-	-- Composite index to speed up yearly aggregation queries
+	-- Indexes for query performance
+	CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
 	CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
+	CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
 
-	-- Stores limit as INTEGER cents
 	CREATE TABLE IF NOT EXISTS tfsa_annual_limits (
 		year INTEGER PRIMARY KEY,
 		amount INTEGER NOT NULL
@@ -86,55 +103,6 @@ func createTables(db *sql.DB) error {
 	`
 	_, err := db.Exec(schema)
 	return err
-}
-
-func migrateREALToCents(db *sql.DB) error {
-	var txType string
-	err := db.QueryRow(`SELECT typeof(amount) FROM transactions LIMIT 1`).Scan(&txType)
-	if err == nil && txType == "real" {
-		log.Println("🔄 Migrating transactions.amount from REAL to INTEGER (cents)...")
-		_, err := db.Exec(`
-			CREATE TABLE transactions_new (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				user_id INTEGER NOT NULL,
-				type TEXT NOT NULL CHECK(type IN ('DEPOSIT', 'WITHDRAWAL')),
-				amount INTEGER NOT NULL CHECK(amount > 0),
-				date DATE NOT NULL,
-				note TEXT DEFAULT '',
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			INSERT INTO transactions_new (id, user_id, type, amount, date, note, created_at)
-			SELECT id, user_id, type, CAST(ROUND(amount * 100) AS INTEGER), date, note, created_at FROM transactions;
-			DROP TABLE transactions;
-			ALTER TABLE transactions_new RENAME TO transactions;
-			CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
-		`)
-		if err != nil {
-			return fmt.Errorf("failed to migrate transactions: %w", err)
-		}
-	}
-
-	var limitType string
-	err = db.QueryRow(`SELECT typeof(amount) FROM tfsa_annual_limits LIMIT 1`).Scan(&limitType)
-	if err == nil && limitType == "real" {
-		log.Println("🔄 Migrating tfsa_annual_limits.amount from REAL to INTEGER (cents)...")
-		_, err := db.Exec(`
-			CREATE TABLE tfsa_annual_limits_new (
-				year INTEGER PRIMARY KEY,
-				amount INTEGER NOT NULL
-			);
-			INSERT INTO tfsa_annual_limits_new (year, amount)
-			SELECT year, CAST(ROUND(amount * 100) AS INTEGER) FROM tfsa_annual_limits;
-			DROP TABLE tfsa_annual_limits;
-			ALTER TABLE tfsa_annual_limits_new RENAME TO tfsa_annual_limits;
-		`)
-		if err != nil {
-			return fmt.Errorf("failed to migrate tfsa_annual_limits: %w", err)
-		}
-	}
-
-	return nil
 }
 
 func EnsureAnnualLimitExists(db *sql.DB, targetYear int) error {
@@ -163,7 +131,6 @@ func EnsureAnnualLimitExists(db *sql.DB, targetYear int) error {
 		return fmt.Errorf("failed to auto-insert limit for year %d: %w", targetYear, err)
 	}
 
-	log.Printf("⚠️ Auto-fallback triggered: TFSA limit for %d missing. Populated using %d limit ($%.2f)", targetYear, previousYear, float64(previousAmountCents)/100.0)
 	return nil
 }
 
@@ -188,7 +155,6 @@ func seedAnnualLimits(db *sql.DB) error {
 		}
 	}
 
-	// Use Toronto timezone for current year boundary check
 	loc, err := time.LoadLocation("America/Toronto")
 	if err != nil {
 		loc = time.UTC

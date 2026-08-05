@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TFSA Dashboard - TFSA Tracker</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
@@ -15,6 +14,7 @@
             <span class="bg-slate-700 text-slate-300 text-xs font-semibold px-2.5 py-1 rounded-full">Tax Year {{.Summary.Year}}</span>
         </div>
         <div class="flex items-center space-x-4">
+            <a href="/accounts" class="text-sm font-medium text-slate-300 hover:text-slate-100 transition">Manage Accounts</a>
             {{if eq .UserRole "ADMIN"}}
                 <a href="/admin" class="text-sm font-medium text-indigo-400 hover:text-indigo-300 transition">Admin Panel</a>
             {{end}}
@@ -46,29 +46,23 @@
 
         <!-- Add Transaction & Profile Split -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Left Side: Profile & Form Cards -->
+            <!-- Left Side: Form Cards -->
             <div class="space-y-6 h-fit">
-                <!-- User Profile Settings Card -->
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
-                    <h3 class="text-lg font-bold text-slate-100 mb-4">User Settings</h3>
-                    <form action="/user/profile/update" method="POST" class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Eligible TFSA Start Year</label>
-                            <input type="number" min="2009" max="2100" name="start_year" value="{{.User.StartYear}}" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
-                            <p class="text-[10px] text-slate-400 mt-1">Year you turned 18 and became eligible for TFSA room.</p>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Phone Number (Optional)</label>
-                            <input type="tel" name="phone_number" value="{{.User.PhoneNumber}}" placeholder="+1 416-555-0199" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
-                        </div>
-                        <button type="submit" class="w-full bg-slate-700 hover:bg-slate-600 text-indigo-300 font-medium py-2 rounded-lg transition shadow-md border border-slate-600">Save Profile</button>
-                    </form>
-                </div>
-
                 <!-- Record Transaction Form Card -->
                 <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                     <h3 class="text-lg font-bold text-slate-100 mb-4">Record Transaction</h3>
                     <form action="/transaction/add" method="POST" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Target Account *</label>
+                            <select name="account_id" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                                <option value="" disabled selected>-- Select TFSA Account --</option>
+                                {{range .Accounts}}
+                                    <option value="{{.ID}}">{{.AccountName}} ({{.Institution}})</option>
+                                {{else}}
+                                    <option value="" disabled>No accounts registered yet. Go to Manage Accounts first.</option>
+                                {{end}}
+                            </select>
+                        </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-400 mb-1">Transaction Type</label>
                             <select name="type" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
@@ -85,10 +79,27 @@
                             <input type="date" name="date" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Institution / Note</label>
-                            <input type="text" name="note" placeholder="e.g. Wealthsimple / Questrade" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Note / Description</label>
+                            <input type="text" name="note" placeholder="e.g. Monthly auto-deposit" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
                         </div>
-                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg transition shadow-md">Add Transaction</button>
+                        <button type="submit" {{if eq (len .Accounts) 0}}disabled class="w-full bg-slate-700 text-slate-500 font-medium py-2 rounded-lg cursor-not-allowed"{{else}}class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg transition shadow-md"{{end}}>Add Transaction</button>
+                    </form>
+                </div>
+
+                <!-- User Profile Settings Card -->
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+                    <h3 class="text-lg font-bold text-slate-100 mb-4">User Settings</h3>
+                    <form action="/user/profile/update" method="POST" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Eligible TFSA Start Year</label>
+                            <input type="number" min="2009" max="2100" name="start_year" value="{{.User.StartYear}}" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                            <p class="text-[10px] text-slate-400 mt-1">Year you turned 18 and became eligible for TFSA room.</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Phone Number (Optional)</label>
+                            <input type="tel" name="phone_number" value="{{.User.PhoneNumber}}" placeholder="+1 416-555-0199" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <button type="submit" class="w-full bg-slate-700 hover:bg-slate-600 text-indigo-300 font-medium py-2 rounded-lg transition shadow-md border border-slate-600">Save Profile</button>
                     </form>
                 </div>
             </div>
@@ -101,6 +112,7 @@
                         <thead>
                             <tr class="border-b border-slate-700 text-xs font-medium text-slate-400 uppercase">
                                 <th class="py-3 px-2">Date</th>
+                                <th class="py-3 px-2">Account</th>
                                 <th class="py-3 px-2">Type</th>
                                 <th class="py-3 px-2">Amount</th>
                                 <th class="py-3 px-2">Note</th>
@@ -111,6 +123,7 @@
                             {{range .Transactions}}
                             <tr class="hover:bg-slate-750 transition">
                                 <td class="py-3 px-2 text-slate-300">{{.FormattedDate}}</td>
+                                <td class="py-3 px-2 font-medium text-indigo-300">{{.AccountName}}</td>
                                 <td class="py-3 px-2">
                                     {{if eq .Type "DEPOSIT"}}
                                         <span class="bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2 py-0.5 rounded">DEPOSIT</span>
@@ -129,7 +142,7 @@
                             </tr>
                             {{else}}
                             <tr>
-                                <td colspan="5" class="py-8 text-center text-slate-500">No transactions recorded yet.</td>
+                                <td colspan="6" class="py-8 text-center text-slate-500">No transactions recorded yet.</td>
                             </tr>
                             {{end}}
                         </tbody>

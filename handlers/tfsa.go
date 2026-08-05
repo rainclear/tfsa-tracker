@@ -14,30 +14,44 @@ import (
 	"tfsa-tracker/utils"
 )
 
-//go:embed templates/dashboard.html
+//go:embed templates/dashboard.html templates/accounts.html
 var templateFS embed.FS
 
 type TFSAHandler struct {
 	Service   *services.TFSAService
 	dashboard *template.Template
+	accounts  *template.Template
 }
 
 type DashboardViewData struct {
 	User         *models.User
+	Accounts     []models.Account
 	Summary      *models.TFSASummary
 	Transactions []models.Transaction
 	UserRole     models.UserRole
 }
 
+type AccountsViewData struct {
+	User     *models.User
+	Accounts []models.Account
+	UserRole models.UserRole
+}
+
 func NewTFSAHandler(db *sql.DB) *TFSAHandler {
-	tmpl, err := template.ParseFS(templateFS, "templates/dashboard.html")
+	dashTmpl, err := template.ParseFS(templateFS, "templates/dashboard.html")
 	if err != nil {
 		panic("Failed to parse embedded dashboard template: " + err.Error())
 	}
 
+	acctTmpl, err := template.ParseFS(templateFS, "templates/accounts.html")
+	if err != nil {
+		panic("Failed to parse embedded accounts template: " + err.Error())
+	}
+
 	return &TFSAHandler{
 		Service:   services.NewTFSAService(db),
-		dashboard: tmpl,
+		dashboard: dashTmpl,
+		accounts:  acctTmpl,
 	}
 }
 
@@ -56,6 +70,12 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	accounts, err := models.GetUserAccounts(h.Service.DB, userID)
+	if err != nil {
+		http.Error(w, "Failed to load user accounts: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	summary, err := h.Service.CalculateCurrentSummary(userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -70,6 +90,7 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 	data := DashboardViewData{
 		User:         user,
+		Accounts:     accounts,
 		Summary:      summary,
 		Transactions: txs,
 		UserRole:     role,
@@ -78,6 +99,96 @@ func (h *TFSAHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.dashboard.Execute(w, data); err != nil {
 		http.Error(w, "Template execution error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *TFSAHandler) AccountsPage(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	role, _ := r.Context().Value(auth.RoleContextKey).(models.UserRole)
+	user, err := models.GetUserByID(h.Service.DB, userID)
+	if err != nil {
+		http.Error(w, "Failed to load user profile", http.StatusInternalServerError)
+		return
+	}
+
+	accounts, err := models.GetUserAccounts(h.Service.DB, userID)
+	if err != nil {
+		http.Error(w, "Failed to load accounts: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := AccountsViewData{
+		User:     user,
+		Accounts: accounts,
+		UserRole: role,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.accounts.Execute(w, data)
+}
+
+func (h *TFSAHandler) SaveAccount(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		accountID, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+		acct := models.Account{
+			ID:             accountID,
+			UserID:         userID,
+			AccountName:    r.FormValue("account_name"),
+			AccountNameCRA: r.FormValue("account_name_cra"),
+			AccountType:    r.FormValue("account_type"),
+			Institution:    r.FormValue("institution"),
+			AccountNumber:  r.FormValue("account_number"),
+			OpeningDate:    r.FormValue("opening_date"),
+			CloseDate:      r.FormValue("close_date"),
+			Notes:          r.FormValue("notes"),
+		}
+
+		if acct.AccountType == "" {
+			acct.AccountType = "TFSA"
+		}
+
+		var err error
+		if acct.ID == 0 {
+			err = models.AddAccount(h.Service.DB, &acct)
+		} else {
+			err = models.UpdateAccount(h.Service.DB, &acct)
+		}
+
+		if err != nil {
+			http.Error(w, "Failed to save account: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		http.Redirect(w, r, "/accounts", http.StatusSeeOther)
+	}
+}
+
+func (h *TFSAHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		accountID, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+		if err := models.DeleteAccount(h.Service.DB, userID, accountID); err != nil {
+			http.Error(w, "Failed to delete account: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		http.Redirect(w, r, "/accounts", http.StatusSeeOther)
 	}
 }
 
@@ -109,6 +220,12 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPost {
+		accountID, err := strconv.ParseInt(r.FormValue("account_id"), 10, 64)
+		if err != nil || accountID <= 0 {
+			http.Error(w, "Please select a valid account", http.StatusBadRequest)
+			return
+		}
+
 		txType := models.TransactionType(r.FormValue("type"))
 		amountStr := r.FormValue("amount")
 
@@ -125,7 +242,7 @@ func (h *TFSAHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 			dateStr = time.Now().In(h.Service.Loc).Format("2006-01-02")
 		}
 
-		err = h.Service.AddTransaction(userID, txType, amountCents, dateStr, note)
+		err = h.Service.AddTransaction(userID, accountID, txType, amountCents, dateStr, note)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

@@ -126,10 +126,11 @@ func (s *TFSAService) CalculateCurrentSummary(userID int64) (*models.TFSASummary
 
 func (s *TFSAService) GetUserTransactions(userID int64) ([]models.Transaction, error) {
 	rows, err := s.DB.Query(`
-		SELECT id, user_id, type, amount, date, note, created_at 
-		FROM transactions 
-		WHERE user_id = ? 
-		ORDER BY date DESC, id DESC
+		SELECT t.id, t.user_id, t.account_id, COALESCE(a.account_name, 'Unknown Account'), t.type, t.amount, t.date, t.note, t.created_at 
+		FROM transactions t
+		LEFT JOIN accounts a ON t.account_id = a.id
+		WHERE t.user_id = ? 
+		ORDER BY t.date DESC, t.id DESC
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -139,7 +140,7 @@ func (s *TFSAService) GetUserTransactions(userID int64) ([]models.Transaction, e
 	var txs []models.Transaction
 	for rows.Next() {
 		var tx models.Transaction
-		if err := rows.Scan(&tx.ID, &tx.UserID, &tx.Type, &tx.Amount, &tx.Date, &tx.Note, &tx.CreatedAt); err != nil {
+		if err := rows.Scan(&tx.ID, &tx.UserID, &tx.AccountID, &tx.AccountName, &tx.Type, &tx.Amount, &tx.Date, &tx.Note, &tx.CreatedAt); err != nil {
 			return nil, err
 		}
 		txs = append(txs, tx)
@@ -147,9 +148,13 @@ func (s *TFSAService) GetUserTransactions(userID int64) ([]models.Transaction, e
 	return txs, nil
 }
 
-func (s *TFSAService) AddTransaction(userID int64, txType models.TransactionType, amountCents int64, dateStr, note string) error {
+func (s *TFSAService) AddTransaction(userID, accountID int64, txType models.TransactionType, amountCents int64, dateStr, note string) error {
 	if amountCents <= 0 {
 		return fmt.Errorf("amount must be greater than zero")
+	}
+
+	if accountID <= 0 {
+		return fmt.Errorf("a valid account must be selected")
 	}
 
 	if dateStr == "" {
@@ -157,9 +162,9 @@ func (s *TFSAService) AddTransaction(userID int64, txType models.TransactionType
 	}
 
 	_, err := s.DB.Exec(`
-		INSERT INTO transactions (user_id, type, amount, date, note)
-		VALUES (?, ?, ?, ?, ?)
-	`, userID, txType, amountCents, dateStr, note)
+		INSERT INTO transactions (user_id, account_id, type, amount, date, note)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, userID, accountID, txType, amountCents, dateStr, note)
 	return err
 }
 
