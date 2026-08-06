@@ -23,8 +23,8 @@
         </div>
     </nav>
 
-    <!-- Switched to full width layout with padding -->
-    <main class="w-full max-w-full px-8 py-8 space-y-8">
+    <!-- Main container set to 3/4 viewport width and centered horizontally -->
+    <main class="w-full lg:w-3/4 mx-auto px-6 py-8 space-y-8">
         
         {{if .SuccessMsg}}
         <div class="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-3 rounded-xl text-sm font-medium">
@@ -38,7 +38,7 @@
         </div>
         {{end}}
 
-        <!-- Summary Cards -->
+        <!-- Summary Cards (4 columns) -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                 <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Remaining Room ({{.Summary.Year}})</p>
@@ -58,10 +58,10 @@
             </div>
         </div>
 
-        <!-- 12-column Grid split (4 cols left / 8 cols right) -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <!-- Left Side: Form Cards Column (4/12 width) -->
-            <div id="leftColumn" class="lg:col-span-4 space-y-6 h-fit">
+        <!-- 4-column Grid layout: Left side takes 1 col (matches Remaining Room width), Right side takes 3 cols (matches total width of remaining 3 cards) -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+            <!-- Left Side: Form Cards Column (1/4 width) -->
+            <div id="leftColumn" class="lg:col-span-1 space-y-6 h-fit">
                 <!-- Record Transaction Form Card -->
                 <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                     <h3 class="text-lg font-bold text-slate-100 mb-4">Record Transaction</h3>
@@ -137,8 +137,8 @@
                 </div>
             </div>
 
-            <!-- Right Side: Scrollable Transaction Table Card (8/12 width) -->
-            <div id="rightCard" class="lg:col-span-8 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm flex flex-col min-h-0">
+            <!-- Right Side: Scrollable Transaction Table Card (3/4 width) -->
+            <div id="rightCard" class="lg:col-span-3 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm flex flex-col min-h-0">
                 <h3 class="text-lg font-bold text-slate-100 mb-4 flex-shrink-0">Transaction History</h3>
                 
                 <div id="tableScrollContainer" class="overflow-y-auto overflow-x-hidden flex-1 pr-1">
