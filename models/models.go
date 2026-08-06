@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"tfsa-tracker/utils"
 )
 
 type EmailToken struct {
@@ -50,6 +52,10 @@ func (t Transaction) AmountInDollars() float64 {
 	return float64(t.Amount) / 100.0
 }
 
+func (t Transaction) FormattedAmount() string {
+	return utils.FormatCurrency(t.Amount)
+}
+
 func (t Transaction) FormattedDate() string {
 	if len(t.Date) >= 10 {
 		return t.Date[:10]
@@ -73,6 +79,11 @@ func (s TFSASummary) TotalDepositedDollars() float64  { return float64(s.TotalDe
 func (s TFSASummary) TotalWithdrawnDollars() float64  { return float64(s.TotalWithdrawn) / 100.0 }
 func (s TFSASummary) NewRoomThisYearDollars() float64 { return float64(s.NewRoomThisYear) / 100.0 }
 
+func (s TFSASummary) FormattedRemainingRoom() string   { return utils.FormatCurrency(s.RemainingRoom) }
+func (s TFSASummary) FormattedTotalDeposited() string  { return utils.FormatCurrency(s.TotalDeposited) }
+func (s TFSASummary) FormattedTotalWithdrawn() string  { return utils.FormatCurrency(s.TotalWithdrawn) }
+func (s TFSASummary) FormattedNewRoomThisYear() string { return utils.FormatCurrency(s.NewRoomThisYear) }
+
 // YearlyCheckingRow represents a row in the dynamic Yearly Checking view
 type YearlyCheckingRow struct {
 	Year           int   `json:"year"`
@@ -90,6 +101,12 @@ func (r YearlyCheckingRow) DepositDollars() float64        { return float64(r.De
 func (r YearlyCheckingRow) WithdrawalDollars() float64     { return float64(r.Withdrawal) / 100.0 }
 func (r YearlyCheckingRow) RemainingRoomDollars() float64  { return float64(r.RemainingRoom) / 100.0 }
 
+func (r YearlyCheckingRow) FormattedNewRoom() string        { return utils.FormatCurrency(r.NewRoom) }
+func (r YearlyCheckingRow) FormattedTotalStartRoom() string { return utils.FormatCurrency(r.TotalStartRoom) }
+func (r YearlyCheckingRow) FormattedDeposit() string        { return utils.FormatCurrency(r.Deposit) }
+func (r YearlyCheckingRow) FormattedWithdrawal() string     { return utils.FormatCurrency(r.Withdrawal) }
+func (r YearlyCheckingRow) FormattedRemainingRoom() string  { return utils.FormatCurrency(r.RemainingRoom) }
+
 type AnnualLimit struct {
 	Year   int   `json:"year"`
 	Amount int64 `json:"amount"`
@@ -97,6 +114,10 @@ type AnnualLimit struct {
 
 func (a AnnualLimit) AmountInDollars() float64 {
 	return float64(a.Amount) / 100.0
+}
+
+func (a AnnualLimit) FormattedAmount() string {
+	return utils.FormatCurrency(a.Amount)
 }
 
 // Account Database Methods
@@ -176,6 +197,14 @@ func (d CRASummaryDetail) WithdrawalDollars() float64 {
 	return float64(d.Withdrawal) / 100.0
 }
 
+func (d CRASummaryDetail) FormattedContribution() string {
+	return utils.FormatCurrency(d.Contribution)
+}
+
+func (d CRASummaryDetail) FormattedWithdrawal() string {
+	return utils.FormatCurrency(d.Withdrawal)
+}
+
 type CRASummaryRow struct {
 	AccountNameCRA string
 	AccountName    string
@@ -193,6 +222,14 @@ func (r CRASummaryRow) WithdrawalDollars() float64 {
 	return float64(r.Withdrawal) / 100.0
 }
 
+func (r CRASummaryRow) FormattedContribution() string {
+	return utils.FormatCurrency(r.Contribution)
+}
+
+func (r CRASummaryRow) FormattedWithdrawal() string {
+	return utils.FormatCurrency(r.Withdrawal)
+}
+
 type CRASummaryTotal struct {
 	TotalContribution int64
 	TotalWithdrawal   int64
@@ -205,4 +242,12 @@ func (t CRASummaryTotal) ContributionDollars() float64 {
 
 func (t CRASummaryTotal) WithdrawalDollars() float64 {
 	return float64(t.TotalWithdrawal) / 100.0
+}
+
+func (t CRASummaryTotal) FormattedContribution() string {
+	return utils.FormatCurrency(t.TotalContribution)
+}
+
+func (t CRASummaryTotal) FormattedWithdrawal() string {
+	return utils.FormatCurrency(t.TotalWithdrawal)
 }

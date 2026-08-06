@@ -30,6 +30,18 @@
     </nav>
 
     <main class="max-w-6xl mx-auto px-6 py-8 space-y-6">
+        <!-- Export CSV Panel Card -->
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h3 class="text-lg font-bold text-slate-100">Export CRA Summary CSV</h3>
+                <p class="text-xs text-slate-400 mt-1">Download your account pivot summary formatted for CRA compliance and record keeping.</p>
+            </div>
+            <a href="/cra-summary/export" class="inline-flex items-center justify-center bg-sky-600 hover:bg-sky-500 text-white font-medium px-4 py-2.5 rounded-lg transition shadow-md text-sm whitespace-nowrap">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                Export CRA Summary CSV
+            </a>
+        </div>
+
         <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
             <div class="flex justify-between items-center mb-6">
                 <div>
@@ -60,8 +72,8 @@
                                 <span>{{$row.AccountNameCRA}} Total</span>
                             </td>
                             <td class="py-2.5 px-3"></td>
-                            <td class="py-2.5 px-3 text-right font-semibold text-indigo-300">${{printf "%.2f" $row.ContributionDollars}}</td>
-                            <td class="py-2.5 px-3 text-right font-semibold text-amber-300">${{printf "%.2f" $row.WithdrawalDollars}}</td>
+                            <td class="py-2.5 px-3 text-right font-semibold text-indigo-300">{{$row.FormattedContribution}}</td>
+                            <td class="py-2.5 px-3 text-right font-semibold text-amber-300">{{$row.FormattedWithdrawal}}</td>
                             <td class="py-2.5 px-3 text-right font-medium text-slate-300">{{$row.TransCount}}</td>
                         </tr>
 
@@ -72,8 +84,8 @@
                                 {{$row.AccountNameCRA}}
                             </td>
                             <td class="py-2 px-3 text-slate-300 font-mono">{{$d.FormattedDate}}</td>
-                            <td class="py-2 px-3 text-right text-slate-200">${{printf "%.2f" $d.ContributionDollars}}</td>
-                            <td class="py-2 px-3 text-right text-slate-200">${{printf "%.2f" $d.WithdrawalDollars}}</td>
+                            <td class="py-2 px-3 text-right text-slate-200">{{$d.FormattedContribution}}</td>
+                            <td class="py-2 px-3 text-right text-slate-200">{{$d.FormattedWithdrawal}}</td>
                             <td class="py-2 px-3 text-right text-slate-400">{{$d.TransCount}}</td>
                         </tr>
                         {{end}}
@@ -87,8 +99,8 @@
                         <tr class="pivot-grand-total font-bold text-slate-100 text-sm">
                             <td class="py-3 px-3">Grand Total</td>
                             <td class="py-3 px-3"></td>
-                            <td class="py-3 px-3 text-right text-emerald-400">${{printf "%.2f" .GrandTotal.ContributionDollars}}</td>
-                            <td class="py-3 px-3 text-right text-amber-400">${{printf "%.2f" .GrandTotal.WithdrawalDollars}}</td>
+                            <td class="py-3 px-3 text-right text-emerald-400">{{.GrandTotal.FormattedContribution}}</td>
+                            <td class="py-3 px-3 text-right text-amber-400">{{.GrandTotal.FormattedWithdrawal}}</td>
                             <td class="py-3 px-3 text-right text-indigo-300">{{.GrandTotal.TotalTransCount}}</td>
                         </tr>
                     </tbody>

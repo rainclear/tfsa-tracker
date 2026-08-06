@@ -245,6 +245,24 @@ func (h *TFSAHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *TFSAHandler) ExportCRASummaryCSV(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	filename := fmt.Sprintf("TFSA_CRA_Summary_Export_%s.csv", time.Now().In(h.Service.Loc).Format("2006-01-02"))
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+
+	if err := h.Service.ExportCRASummaryCSV(userID, w); err != nil {
+		http.Error(w, "Failed to export CRA summary CSV: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
 func (h *TFSAHandler) AccountsPage(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {

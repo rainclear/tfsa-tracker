@@ -490,7 +490,7 @@ func (s *TFSAService) ExportTransactionsCSV(userID int64, w io.Writer) error {
 			cleanDate = cleanDate[:10]
 		}
 
-		formattedAmount := formatCurrency(amountCents)
+		formattedAmount := utils.FormatCurrency(amountCents)
 
 		depositVal := ""
 		withdrawalVal := ""
@@ -521,6 +521,135 @@ func (s *TFSAService) ExportTransactionsCSV(userID int64, w io.Writer) error {
 	return rows.Err()
 }
 
+func (s *TFSAService) ExportCRASummaryCSV(userID int64, w io.Writer) error {
+	accounts, err := models.GetUserAccounts(s.DB, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user accounts: %w", err)
+	}
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	header := []string{
+		"Account Name at CRA (Auto Fill)",
+		"Transaction Date",
+		"Index",
+		"Sum of Contribution",
+		"Sum of Withdrawal",
+		"Num of Trans",
+	}
+
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("failed to write CRA summary CSV header: %w", err)
+	}
+
+	var grandContrib, grandWithdrawal int64
+	var grandTransCount int
+
+	for _, acct := range accounts {
+		craName := strings.TrimSpace(acct.AccountNameCRA)
+		if craName == "" {
+			craName = acct.AccountName
+		}
+
+		rows, err := s.DB.Query(`
+			SELECT id, type, amount, date
+			FROM transactions
+			WHERE user_id = ? AND account_id = ?
+			ORDER BY date ASC, id ASC
+		`, userID, acct.ID)
+		if err != nil {
+			return fmt.Errorf("failed to query transactions for account %d: %w", acct.ID, err)
+		}
+
+		var acctContrib, acctWithdrawal int64
+		var acctTransCount int
+		isFirstRow := true
+
+		for rows.Next() {
+			var txID int64
+			var txType string
+			var amountCents int64
+			var rawDate string
+
+			if err := rows.Scan(&txID, &txType, &amountCents, &rawDate); err != nil {
+				rows.Close()
+				return fmt.Errorf("failed to scan transaction row: %w", err)
+			}
+
+			cleanDate := strings.TrimSpace(rawDate)
+			if len(cleanDate) >= 10 {
+				cleanDate = cleanDate[:10]
+			}
+
+			var depStr, wdStr string
+			if txType == "DEPOSIT" {
+				depStr = utils.FormatCurrency(amountCents)
+				wdStr = "$0.00"
+				acctContrib += amountCents
+			} else {
+				depStr = "$0.00"
+				wdStr = utils.FormatCurrency(amountCents)
+				acctWithdrawal += amountCents
+			}
+			acctTransCount++
+
+			acctNameCell := ""
+			if isFirstRow {
+				acctNameCell = craName
+				isFirstRow = false
+			}
+
+			record := []string{
+				acctNameCell,
+				cleanDate,
+				strconv.FormatInt(txID, 10),
+				depStr,
+				wdStr,
+				"1",
+			}
+
+			if err := writer.Write(record); err != nil {
+				rows.Close()
+				return fmt.Errorf("failed to write transaction row to CSV: %w", err)
+			}
+		}
+		rows.Close()
+
+		if acctTransCount > 0 {
+			acctTotalRecord := []string{
+				fmt.Sprintf("%s Total", craName),
+				"",
+				"",
+				utils.FormatCurrency(acctContrib),
+				utils.FormatCurrency(acctWithdrawal),
+				strconv.Itoa(acctTransCount),
+			}
+			if err := writer.Write(acctTotalRecord); err != nil {
+				return fmt.Errorf("failed to write account total row to CSV: %w", err)
+			}
+
+			grandContrib += acctContrib
+			grandWithdrawal += acctWithdrawal
+			grandTransCount += acctTransCount
+		}
+	}
+
+	grandTotalRecord := []string{
+		"Grand Total",
+		"",
+		"",
+		utils.FormatCurrency(grandContrib),
+		utils.FormatCurrency(grandWithdrawal),
+		strconv.Itoa(grandTransCount),
+	}
+	if err := writer.Write(grandTotalRecord); err != nil {
+		return fmt.Errorf("failed to write grand total row to CSV: %w", err)
+	}
+
+	return nil
+}
+
 func max(a, b int) int {
 	if a > b {
 		return a
@@ -534,25 +663,4 @@ func cleanCurrencyString(val string) string {
 	val = strings.ReplaceAll(val, ",", "")
 	val = strings.ReplaceAll(val, "\"", "")
 	return val
-}
-
-func formatCurrency(cents int64) string {
-	dollars := float64(cents) / 100.0
-
-	str := fmt.Sprintf("%.2f", dollars)
-	parts := strings.Split(str, ".")
-
-	intPart := parts[0]
-	decPart := parts[1]
-
-	var result []string
-	length := len(intPart)
-	for i, c := range intPart {
-		if i > 0 && (length-i)%3 == 0 {
-			result = append(result, ",")
-		}
-		result = append(result, string(c))
-	}
-
-	return fmt.Sprintf("$%s.%s", strings.Join(result, ""), decPart)
 }

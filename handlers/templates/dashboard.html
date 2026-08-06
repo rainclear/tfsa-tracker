@@ -43,23 +43,23 @@
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                 <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Remaining Room ({{.Summary.Year}})</p>
-                <p class="text-3xl font-extrabold text-emerald-400 mt-2">${{printf "%.2f" .Summary.RemainingRoomDollars}}</p>
+                <p class="text-3xl font-extrabold text-emerald-400 mt-2">{{.Summary.FormattedRemainingRoom}}</p>
             </div>
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                 <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Deposited ({{.Summary.Year}})</p>
-                <p class="text-3xl font-bold text-indigo-400 mt-2">${{printf "%.2f" .Summary.TotalDepositedDollars}}</p>
+                <p class="text-3xl font-bold text-indigo-400 mt-2">{{.Summary.FormattedTotalDeposited}}</p>
             </div>
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                 <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Withdrawn ({{.Summary.Year}})</p>
-                <p class="text-3xl font-bold text-amber-400 mt-2">${{printf "%.2f" .Summary.TotalWithdrawnDollars}}</p>
+                <p class="text-3xl font-bold text-amber-400 mt-2">{{.Summary.FormattedTotalWithdrawn}}</p>
             </div>
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                 <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">New Limit ({{.Summary.Year}})</p>
-                <p class="text-3xl font-bold text-slate-200 mt-2">${{printf "%.2f" .Summary.NewRoomThisYearDollars}}</p>
+                <p class="text-3xl font-bold text-slate-200 mt-2">{{.Summary.FormattedNewRoomThisYear}}</p>
             </div>
         </div>
 
-        <!-- 4-column Grid layout: Left side takes 1 col (matches Remaining Room width), Right side takes 3 cols (matches total width of remaining 3 cards) -->
+        <!-- 4-column Grid layout -->
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
             <!-- Left Side: Form Cards Column (1/4 width) -->
             <div id="leftColumn" class="lg:col-span-1 space-y-6 h-fit">
@@ -138,7 +138,7 @@
                 </div>
             </div>
 
-            <!-- Right Side: Scrollable Transaction Table Card (3/4 width) -->
+            <!-- Right Side: Scrollable Transaction Table Card -->
             <div id="rightCard" class="lg:col-span-3 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm flex flex-col min-h-0">
                 <h3 class="text-lg font-bold text-slate-100 mb-4 flex-shrink-0">Transaction History</h3>
                 
@@ -166,7 +166,7 @@
                                         <span class="bg-amber-500/10 text-amber-400 text-xs font-semibold px-2 py-0.5 rounded">WITHDRAWAL</span>
                                     {{end}}
                                 </td>
-                                <td class="py-3 px-2 font-medium text-slate-100 whitespace-nowrap">${{printf "%.2f" .AmountInDollars}}</td>
+                                <td class="py-3 px-2 font-medium text-slate-100 whitespace-nowrap">{{.FormattedAmount}}</td>
                                 <td class="py-3 px-2 text-slate-400 break-words">{{.Note}}</td>
                                 <td class="py-3 px-2 text-right whitespace-nowrap">
                                     <form action="/transaction/delete" method="POST" class="inline" onsubmit="return confirm('Delete this transaction?');">
@@ -189,7 +189,7 @@
 
     <script>
         function matchPanelHeights() {
-            if (window.innerWidth >= 1024) { // Matches Tailwind's lg breakpoint
+            if (window.innerWidth >= 1024) {
                 const leftCol = document.getElementById('leftColumn');
                 const rightCard = document.getElementById('rightCard');
                 if (leftCol && rightCard) {

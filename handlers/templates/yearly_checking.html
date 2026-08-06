@@ -49,12 +49,12 @@
                         {{range .Rows}}
                         <tr class="hover:bg-slate-750 transition">
                             <td class="py-3 px-4 font-bold text-indigo-400">{{.Year}}</td>
-                            <td class="py-3 px-4 text-right text-slate-300">${{printf "%.2f" .NewRoomDollars}}</td>
-                            <td class="py-3 px-4 text-right text-slate-200 font-medium">${{printf "%.2f" .TotalStartRoomDollars}}</td>
-                            <td class="py-3 px-4 text-right text-indigo-300 font-medium">${{printf "%.2f" .DepositDollars}}</td>
-                            <td class="py-3 px-4 text-right text-amber-300 font-medium">${{printf "%.2f" .WithdrawalDollars}}</td>
+                            <td class="py-3 px-4 text-right text-slate-300">{{.FormattedNewRoom}}</td>
+                            <td class="py-3 px-4 text-right text-slate-200 font-medium">{{.FormattedTotalStartRoom}}</td>
+                            <td class="py-3 px-4 text-right text-indigo-300 font-medium">{{.FormattedDeposit}}</td>
+                            <td class="py-3 px-4 text-right text-amber-300 font-medium">{{.FormattedWithdrawal}}</td>
                             <td class="py-3 px-4 text-right font-bold {{if .IsOverLimit}}bg-rose-500/20 text-rose-300 rounded-md border border-rose-500/30{{else}}bg-emerald-500/10 text-emerald-400 rounded-md{{end}}">
-                                ${{printf "%.2f" .RemainingRoomDollars}}
+                                {{.FormattedRemainingRoom}}
                             </td>
                         </tr>
                         {{else}}

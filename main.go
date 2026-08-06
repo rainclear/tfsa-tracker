@@ -59,6 +59,7 @@ func main() {
 	mux.HandleFunc("/dashboard", sessionMgr.RequireAuth(tfsaHandler.Dashboard))
 	mux.HandleFunc("/yearly-checking", sessionMgr.RequireAuth(tfsaHandler.YearlyChecking))
 	mux.HandleFunc("/cra-summary", sessionMgr.RequireAuth(tfsaHandler.CRASummary))
+	mux.HandleFunc("/cra-summary/export", sessionMgr.RequireAuth(tfsaHandler.ExportCRASummaryCSV))
 	mux.HandleFunc("/accounts", sessionMgr.RequireAuth(tfsaHandler.AccountsPage))
 	mux.HandleFunc("/accounts/save", sessionMgr.RequireAuth(tfsaHandler.SaveAccount))
 	mux.HandleFunc("/accounts/delete", sessionMgr.RequireAuth(tfsaHandler.DeleteAccount))

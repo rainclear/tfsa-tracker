@@ -100,7 +100,7 @@
                             {{range .AnnualLimits}}
                             <tr class="hover:bg-slate-750 transition">
                                 <td class="py-2.5 px-2 font-semibold text-indigo-400">{{.Year}}</td>
-                                <td class="py-2.5 px-2 font-medium text-slate-200">${{printf "%.2f" .AmountInDollars}}</td>
+                                <td class="py-2.5 px-2 font-medium text-slate-200">{{.FormattedAmount}}</td>
                                 <td class="py-2.5 px-2 text-right">
                                     <form action="/admin/limit/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete the TFSA room record for year {{.Year}}?');">
                                         <input type="hidden" name="year" value="{{.Year}}">
