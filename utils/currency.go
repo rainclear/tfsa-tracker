@@ -55,3 +55,23 @@ func DollarsToCents(input string) (int64, error) {
 
 	return totalCents, nil
 }
+
+func FormatCurrency(cents int64) string {
+	dollars := float64(cents) / 100.0
+	str := fmt.Sprintf("%.2f", dollars)
+	parts := strings.Split(str, ".")
+
+	intPart := parts[0]
+	decPart := parts[1]
+
+	var result strings.Builder
+	length := len(intPart)
+	for i, c := range intPart {
+		if i > 0 && (length-i)%3 == 0 {
+			result.WriteRune(',')
+		}
+		result.WriteRune(c)
+	}
+
+	return fmt.Sprintf("$%s.%s", result.String(), decPart)
+}

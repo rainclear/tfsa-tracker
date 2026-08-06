@@ -424,13 +424,12 @@ func (s *TFSAService) ExportTransactionsCSV(userID int64, w io.Writer) error {
 			return fmt.Errorf("failed to scan transaction row: %w", err)
 		}
 
-		// 只截取前 10 个字符 (YYYY-MM-DD)，去掉时间戳部分 (T00:00:00Z)
 		cleanDate := strings.TrimSpace(rawDate)
 		if len(cleanDate) >= 10 {
 			cleanDate = cleanDate[:10]
 		}
 
-		formattedAmount := fmt.Sprintf("$%.2f", float64(amountCents)/100.0)
+		formattedAmount := formatCurrency(amountCents)
 
 		depositVal := ""
 		withdrawalVal := ""
@@ -443,7 +442,7 @@ func (s *TFSAService) ExportTransactionsCSV(userID int64, w io.Writer) error {
 
 		record := []string{
 			strconv.Itoa(index),
-			cleanDate, // 使用清理后的日期 2015-08-10
+			cleanDate,
 			acctName,
 			acctCraName,
 			depositVal,
@@ -474,4 +473,27 @@ func cleanCurrencyString(val string) string {
 	val = strings.ReplaceAll(val, ",", "")
 	val = strings.ReplaceAll(val, "\"", "")
 	return val
+}
+
+func formatCurrency(cents int64) string {
+	dollars := float64(cents) / 100.0
+
+	// Format to 2 decimal places first
+	str := fmt.Sprintf("%.2f", dollars)
+	parts := strings.Split(str, ".")
+
+	intPart := parts[0]
+	decPart := parts[1]
+
+	// Add thousands separators (commas)
+	var result []string
+	length := len(intPart)
+	for i, c := range intPart {
+		if i > 0 && (length-i)%3 == 0 {
+			result = append(result, ",")
+		}
+		result = append(result, string(c))
+	}
+
+	return fmt.Sprintf("$%s.%s", strings.Join(result, ""), decPart)
 }
