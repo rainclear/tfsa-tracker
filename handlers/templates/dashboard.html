@@ -23,7 +23,8 @@
         </div>
     </nav>
 
-    <main class="max-w-6xl mx-auto px-6 py-8 space-y-8">
+    <!-- Switched to full width layout with padding -->
+    <main class="w-full max-w-full px-8 py-8 space-y-8">
         
         {{if .SuccessMsg}}
         <div class="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-3 rounded-xl text-sm font-medium">
@@ -40,7 +41,7 @@
         <!-- Summary Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
-                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Remaining Room</p>
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Remaining Room ({{.Summary.Year}})</p>
                 <p class="text-3xl font-extrabold text-emerald-400 mt-2">${{printf "%.2f" .Summary.RemainingRoomDollars}}</p>
             </div>
             <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
@@ -57,10 +58,10 @@
             </div>
         </div>
 
-        <!-- Add Transaction & Profile Split -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-            <!-- Left Side: Form Cards Column -->
-            <div id="leftColumn" class="space-y-6 h-fit">
+        <!-- 12-column Grid split (4 cols left / 8 cols right) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <!-- Left Side: Form Cards Column (4/12 width) -->
+            <div id="leftColumn" class="lg:col-span-4 space-y-6 h-fit">
                 <!-- Record Transaction Form Card -->
                 <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
                     <h3 class="text-lg font-bold text-slate-100 mb-4">Record Transaction</h3>
@@ -136,27 +137,27 @@
                 </div>
             </div>
 
-            <!-- Right Side: Scrollable Transaction Table Card -->
-            <div id="rightCard" class="lg:col-span-2 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm flex flex-col min-h-0">
+            <!-- Right Side: Scrollable Transaction Table Card (8/12 width) -->
+            <div id="rightCard" class="lg:col-span-8 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm flex flex-col min-h-0">
                 <h3 class="text-lg font-bold text-slate-100 mb-4 flex-shrink-0">Transaction History</h3>
                 
-                <div id="tableScrollContainer" class="overflow-y-auto overflow-x-auto flex-1 pr-1">
-                    <table class="w-full text-left border-collapse">
+                <div id="tableScrollContainer" class="overflow-y-auto overflow-x-hidden flex-1 pr-1">
+                    <table class="w-full text-left border-collapse table-fixed">
                         <thead class="sticky top-0 bg-slate-800 z-10">
                             <tr class="border-b border-slate-700 text-xs font-medium text-slate-400 uppercase">
-                                <th class="py-3 px-2">Date</th>
-                                <th class="py-3 px-2">Account</th>
-                                <th class="py-3 px-2">Type</th>
-                                <th class="py-3 px-2">Amount</th>
+                                <th class="py-3 px-2 w-28">Date</th>
+                                <th class="py-3 px-2 w-1/3">Account</th>
+                                <th class="py-3 px-2 w-28">Type</th>
+                                <th class="py-3 px-2 w-32">Amount</th>
                                 <th class="py-3 px-2">Note</th>
-                                <th class="py-3 px-2 text-right">Action</th>
+                                <th class="py-3 px-2 w-20 text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-700/50 text-sm">
                             {{range .Transactions}}
                             <tr class="hover:bg-slate-750 transition">
                                 <td class="py-3 px-2 text-slate-300 whitespace-nowrap">{{.FormattedDate}}</td>
-                                <td class="py-3 px-2 font-medium text-indigo-300 whitespace-nowrap">{{.AccountName}}</td>
+                                <td class="py-3 px-2 font-medium text-indigo-300 break-words">{{.AccountName}}</td>
                                 <td class="py-3 px-2 whitespace-nowrap">
                                     {{if eq .Type "DEPOSIT"}}
                                         <span class="bg-emerald-500/10 text-emerald-400 text-xs font-semibold px-2 py-0.5 rounded">DEPOSIT</span>
@@ -165,7 +166,7 @@
                                     {{end}}
                                 </td>
                                 <td class="py-3 px-2 font-medium text-slate-100 whitespace-nowrap">${{printf "%.2f" .AmountInDollars}}</td>
-                                <td class="py-3 px-2 text-slate-400">{{.Note}}</td>
+                                <td class="py-3 px-2 text-slate-400 break-words">{{.Note}}</td>
                                 <td class="py-3 px-2 text-right whitespace-nowrap">
                                     <form action="/transaction/delete" method="POST" class="inline" onsubmit="return confirm('Delete this transaction?');">
                                         <input type="hidden" name="id" value="{{.ID}}">
