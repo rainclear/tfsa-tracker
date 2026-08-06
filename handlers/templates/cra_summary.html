@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRA Style Summary - TFSA Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .pivot-header { background-color: #334155; }
+        .pivot-row-total { background-color: #1e293b; }
+        .pivot-grand-total { background-color: #0f172a; border-top: 2px solid #475569; border-bottom: 2px solid #475569; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <!-- Navbar -->
+    <nav class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl font-bold text-indigo-400">TFSA Tracker</span>
+            <span class="bg-sky-500/10 text-sky-400 text-xs font-semibold px-2.5 py-1 rounded-full border border-sky-500/20">CRA Style Summary</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <a href="/dashboard" class="text-sm font-medium text-slate-300 hover:text-slate-100 transition">Dashboard</a>
+            <a href="/yearly-checking" class="text-sm font-medium text-emerald-400 hover:text-emerald-300 transition">Yearly Checking</a>
+            <a href="/accounts" class="text-sm font-medium text-slate-300 hover:text-slate-100 transition">Manage Accounts</a>
+            {{if eq .UserRole "ADMIN"}}
+                <a href="/admin" class="text-sm font-medium text-indigo-400 hover:text-indigo-300 transition">Admin Panel</a>
+            {{end}}
+            <a href="/logout" class="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-slate-200 transition">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-6 py-8 space-y-6">
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h3 class="text-xl font-bold text-slate-100">CRA Account Pivot Summary</h3>
+                    <p class="text-xs text-slate-400 mt-1">Grouped by CRA Registered Account Name and Transaction Date.</p>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto border border-slate-700 rounded-lg">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="pivot-header text-slate-200 text-xs font-semibold border-b border-slate-700">
+                            <th class="py-2.5 px-3 w-7/12">Account Name at CRA (Auto Fill)</th>
+                            <th class="py-2.5 px-3 w-2/12 italic">Transaction Date</th>
+                            <th class="py-2.5 px-3 text-right">Sum of Contribution</th>
+                            <th class="py-2.5 px-3 text-right">Sum of Withdrawal</th>
+                            <th class="py-2.5 px-3 text-right w-24">Num of Trans</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700/60 font-sans">
+                        {{range $idx, $row := .Rows}}
+                        <!-- Group Header Row (Summary Row) -->
+                        <tr class="pivot-row-total hover:bg-slate-700/50 cursor-pointer" onclick="toggleDetails({{$idx}})">
+                            <td class="py-2.5 px-3 font-semibold text-slate-100 flex items-center space-x-2">
+                                <button type="button" id="btn-{{$idx}}" class="w-5 h-5 flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded transition">
+                                    +
+                                </button>
+                                <span>{{$row.AccountNameCRA}} Total</span>
+                            </td>
+                            <td class="py-2.5 px-3"></td>
+                            <td class="py-2.5 px-3 text-right font-semibold text-indigo-300">${{printf "%.2f" $row.ContributionDollars}}</td>
+                            <td class="py-2.5 px-3 text-right font-semibold text-amber-300">${{printf "%.2f" $row.WithdrawalDollars}}</td>
+                            <td class="py-2.5 px-3 text-right font-medium text-slate-300">{{$row.TransCount}}</td>
+                        </tr>
+
+                        <!-- Details Sub-Rows (Date Level) -->
+                        {{range $d := $row.Details}}
+                        <tr class="detail-row-{{$idx}} hidden bg-slate-850 hover:bg-slate-800 transition text-xs border-b border-slate-800">
+                            <td class="py-2 px-3 pl-10 text-slate-400 font-normal">
+                                {{$row.AccountNameCRA}}
+                            </td>
+                            <td class="py-2 px-3 text-slate-300 font-mono">{{$d.FormattedDate}}</td>
+                            <td class="py-2 px-3 text-right text-slate-200">${{printf "%.2f" $d.ContributionDollars}}</td>
+                            <td class="py-2 px-3 text-right text-slate-200">${{printf "%.2f" $d.WithdrawalDollars}}</td>
+                            <td class="py-2 px-3 text-right text-slate-400">{{$d.TransCount}}</td>
+                        </tr>
+                        {{end}}
+                        {{else}}
+                        <tr>
+                            <td colspan="5" class="py-8 text-center text-slate-500">No account transaction summary records available.</td>
+                        </tr>
+                        {{end}}
+
+                        <!-- Grand Total Row -->
+                        <tr class="pivot-grand-total font-bold text-slate-100 text-sm">
+                            <td class="py-3 px-3">Grand Total</td>
+                            <td class="py-3 px-3"></td>
+                            <td class="py-3 px-3 text-right text-emerald-400">${{printf "%.2f" .GrandTotal.ContributionDollars}}</td>
+                            <td class="py-3 px-3 text-right text-amber-400">${{printf "%.2f" .GrandTotal.WithdrawalDollars}}</td>
+                            <td class="py-3 px-3 text-right text-indigo-300">{{.GrandTotal.TotalTransCount}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function toggleDetails(index) {
+            const rows = document.querySelectorAll(`.detail-row-${index}`);
+            const btn = document.getElementById(`btn-${index}`);
+            let isHidden = true;
+
+            rows.forEach(row => {
+                if (row.classList.contains('hidden')) {
+                    row.classList.remove('hidden');
+                    isHidden = false;
+                } else {
+                    row.classList.add('hidden');
+                    isHidden = true;
+                }
+            });
+
+            if (btn) {
+                btn.innerText = isHidden ? '+' : '−';
+            }
+        }
+    </script>
+</body>
+</html>

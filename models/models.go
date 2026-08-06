@@ -75,20 +75,20 @@ func (s TFSASummary) NewRoomThisYearDollars() float64 { return float64(s.NewRoom
 
 // YearlyCheckingRow represents a row in the dynamic Yearly Checking view
 type YearlyCheckingRow struct {
-	Year            int   `json:"year"`
-	NewRoom         int64 `json:"new_room"`          // Cents
-	TotalStartRoom  int64 `json:"total_start_room"`  // Cents
-	Deposit         int64 `json:"deposit"`           // Cents
-	Withdrawal      int64 `json:"withdrawal"`        // Cents
-	RemainingRoom   int64 `json:"remaining_room"`    // Cents
-	IsOverLimit     bool  `json:"is_over_limit"`
+	Year           int   `json:"year"`
+	NewRoom        int64 `json:"new_room"`         // Cents
+	TotalStartRoom int64 `json:"total_start_room"` // Cents
+	Deposit        int64 `json:"deposit"`          // Cents
+	Withdrawal     int64 `json:"withdrawal"`       // Cents
+	RemainingRoom  int64 `json:"remaining_room"`   // Cents
+	IsOverLimit    bool  `json:"is_over_limit"`
 }
 
 func (r YearlyCheckingRow) NewRoomDollars() float64        { return float64(r.NewRoom) / 100.0 }
 func (r YearlyCheckingRow) TotalStartRoomDollars() float64 { return float64(r.TotalStartRoom) / 100.0 }
 func (r YearlyCheckingRow) DepositDollars() float64        { return float64(r.Deposit) / 100.0 }
 func (r YearlyCheckingRow) WithdrawalDollars() float64     { return float64(r.Withdrawal) / 100.0 }
-func (r YearlyCheckingRow) RemainingRoomDollars() float64 { return float64(r.RemainingRoom) / 100.0 }
+func (r YearlyCheckingRow) RemainingRoomDollars() float64  { return float64(r.RemainingRoom) / 100.0 }
 
 type AnnualLimit struct {
 	Year   int   `json:"year"`
@@ -158,4 +158,51 @@ func DeleteAccount(db *sql.DB, userID, accountID int64) error {
 		return fmt.Errorf("account not found or unauthorized")
 	}
 	return nil
+}
+
+type CRASummaryDetail struct {
+	Date          string
+	FormattedDate string
+	Contribution  int64
+	Withdrawal    int64
+	TransCount    int
+}
+
+func (d CRASummaryDetail) ContributionDollars() float64 {
+	return float64(d.Contribution) / 100.0
+}
+
+func (d CRASummaryDetail) WithdrawalDollars() float64 {
+	return float64(d.Withdrawal) / 100.0
+}
+
+type CRASummaryRow struct {
+	AccountNameCRA string
+	AccountName    string
+	Contribution   int64
+	Withdrawal     int64
+	TransCount     int
+	Details        []CRASummaryDetail
+}
+
+func (r CRASummaryRow) ContributionDollars() float64 {
+	return float64(r.Contribution) / 100.0
+}
+
+func (r CRASummaryRow) WithdrawalDollars() float64 {
+	return float64(r.Withdrawal) / 100.0
+}
+
+type CRASummaryTotal struct {
+	TotalContribution int64
+	TotalWithdrawal   int64
+	TotalTransCount   int
+}
+
+func (t CRASummaryTotal) ContributionDollars() float64 {
+	return float64(t.TotalContribution) / 100.0
+}
+
+func (t CRASummaryTotal) WithdrawalDollars() float64 {
+	return float64(t.TotalWithdrawal) / 100.0
 }

@@ -15,7 +15,7 @@ import (
 	"tfsa-tracker/utils"
 )
 
-//go:embed templates/dashboard.html templates/accounts.html templates/yearly_checking.html
+//go:embed templates/dashboard.html templates/accounts.html templates/yearly_checking.html templates/cra_summary.html
 var templateFS embed.FS
 
 type TFSAHandler struct {
@@ -23,6 +23,7 @@ type TFSAHandler struct {
 	dashboard      *template.Template
 	accounts       *template.Template
 	yearlyChecking *template.Template
+	craSummary     *template.Template
 }
 
 type DashboardViewData struct {
@@ -47,6 +48,13 @@ type YearlyCheckingViewData struct {
 	UserRole models.UserRole
 }
 
+type CRASummaryViewData struct {
+	User       *models.User
+	Rows       []models.CRASummaryRow
+	GrandTotal models.CRASummaryTotal
+	UserRole   models.UserRole
+}
+
 func NewTFSAHandler(db *sql.DB) *TFSAHandler {
 	dashTmpl, err := template.ParseFS(templateFS, "templates/dashboard.html")
 	if err != nil {
@@ -63,11 +71,17 @@ func NewTFSAHandler(db *sql.DB) *TFSAHandler {
 		panic("Failed to parse embedded yearly checking template: " + err.Error())
 	}
 
+	craTmpl, err := template.ParseFS(templateFS, "templates/cra_summary.html")
+	if err != nil {
+		panic("Failed to parse embedded CRA summary template: " + err.Error())
+	}
+
 	return &TFSAHandler{
 		Service:        services.NewTFSAService(db),
 		dashboard:      dashTmpl,
 		accounts:       acctTmpl,
 		yearlyChecking: yearlyTmpl,
+		craSummary:     craTmpl,
 	}
 }
 
@@ -149,6 +163,40 @@ func (h *TFSAHandler) YearlyChecking(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.yearlyChecking.Execute(w, data); err != nil {
+		http.Error(w, "Template execution error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *TFSAHandler) CRASummary(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	role, _ := r.Context().Value(auth.RoleContextKey).(models.UserRole)
+
+	user, err := models.GetUserByID(h.Service.DB, userID)
+	if err != nil {
+		http.Error(w, "Failed to load user profile", http.StatusInternalServerError)
+		return
+	}
+
+	rows, grandTotal, err := h.Service.GetCRASummary(userID)
+	if err != nil {
+		http.Error(w, "Failed to calculate CRA summary: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := CRASummaryViewData{
+		User:       user,
+		Rows:       rows,
+		GrandTotal: grandTotal,
+		UserRole:   role,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.craSummary.Execute(w, data); err != nil {
 		http.Error(w, "Template execution error: "+err.Error(), http.StatusInternalServerError)
 	}
 }

@@ -55,16 +55,17 @@ func main() {
 	mux.HandleFunc("/logout", authHandler.Logout)
 	mux.HandleFunc("/activate", authHandler.Activate)
 
-	// 3. Protected Dashboard, Account & Yearly Checking Routes
+	// 3. Protected Dashboard, Account, Yearly Checking & CRA Summary Routes
 	mux.HandleFunc("/dashboard", sessionMgr.RequireAuth(tfsaHandler.Dashboard))
 	mux.HandleFunc("/yearly-checking", sessionMgr.RequireAuth(tfsaHandler.YearlyChecking))
+	mux.HandleFunc("/cra-summary", sessionMgr.RequireAuth(tfsaHandler.CRASummary))
 	mux.HandleFunc("/accounts", sessionMgr.RequireAuth(tfsaHandler.AccountsPage))
 	mux.HandleFunc("/accounts/save", sessionMgr.RequireAuth(tfsaHandler.SaveAccount))
 	mux.HandleFunc("/accounts/delete", sessionMgr.RequireAuth(tfsaHandler.DeleteAccount))
 	mux.HandleFunc("/user/profile/update", sessionMgr.RequireAuth(tfsaHandler.UpdateProfile))
 	mux.HandleFunc("/transaction/add", sessionMgr.RequireAuth(tfsaHandler.AddTransaction))
 	mux.HandleFunc("/transaction/import", sessionMgr.RequireAuth(tfsaHandler.ImportCSV))
-	mux.HandleFunc("/transaction/export", sessionMgr.RequireAuth(tfsaHandler.ExportCSV)) // <--- ADD THIS LINE
+	mux.HandleFunc("/transaction/export", sessionMgr.RequireAuth(tfsaHandler.ExportCSV))
 	mux.HandleFunc("/transaction/delete", sessionMgr.RequireAuth(tfsaHandler.DeleteTransaction))
 
 	// 4. Protected Admin Routes

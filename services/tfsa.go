@@ -190,6 +190,73 @@ func (s *TFSAService) CalculateYearlyCheckingHistory(userID int64) ([]models.Yea
 	return history, nil
 }
 
+func (s *TFSAService) GetCRASummary(userID int64) ([]models.CRASummaryRow, models.CRASummaryTotal, error) {
+	var summaryRows []models.CRASummaryRow
+	var grandTotal models.CRASummaryTotal
+
+	accounts, err := models.GetUserAccounts(s.DB, userID)
+	if err != nil {
+		return nil, grandTotal, err
+	}
+
+	for _, acct := range accounts {
+		craName := strings.TrimSpace(acct.AccountNameCRA)
+		if craName == "" {
+			craName = acct.AccountName
+		}
+
+		rows, err := s.DB.Query(`
+			SELECT date,
+			       COALESCE(SUM(CASE WHEN type = 'DEPOSIT' THEN amount ELSE 0 END), 0) AS dep,
+			       COALESCE(SUM(CASE WHEN type = 'WITHDRAWAL' THEN amount ELSE 0 END), 0) AS wd,
+			       COUNT(*) AS cnt
+			FROM transactions
+			WHERE user_id = ? AND account_id = ?
+			GROUP BY date
+			ORDER BY date ASC
+		`, userID, acct.ID)
+		if err != nil {
+			return nil, grandTotal, err
+		}
+
+		var details []models.CRASummaryDetail
+		var acctContrib, acctWd int64
+		var acctCount int
+
+		for rows.Next() {
+			var d models.CRASummaryDetail
+			if err := rows.Scan(&d.Date, &d.Contribution, &d.Withdrawal, &d.TransCount); err != nil {
+				rows.Close()
+				return nil, grandTotal, err
+			}
+			d.FormattedDate = d.Date
+			details = append(details, d)
+
+			acctContrib += d.Contribution
+			acctWd += d.Withdrawal
+			acctCount += d.TransCount
+		}
+		rows.Close()
+
+		if acctCount > 0 {
+			summaryRows = append(summaryRows, models.CRASummaryRow{
+				AccountNameCRA: craName,
+				AccountName:    acct.AccountName,
+				Contribution:   acctContrib,
+				Withdrawal:     acctWd,
+				TransCount:     acctCount,
+				Details:        details,
+			})
+
+			grandTotal.TotalContribution += acctContrib
+			grandTotal.TotalWithdrawal += acctWd
+			grandTotal.TotalTransCount += acctCount
+		}
+	}
+
+	return summaryRows, grandTotal, nil
+}
+
 func (s *TFSAService) GetUserTransactions(userID int64) ([]models.Transaction, error) {
 	rows, err := s.DB.Query(`
 		SELECT t.id, t.user_id, t.account_id, COALESCE(a.account_name, 'Unknown Account'), t.type, t.amount, t.date, t.note, t.created_at 
@@ -260,7 +327,6 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 	for i, h := range header {
 		cleanH := strings.ToLower(strings.TrimSpace(h))
 
-		// Check for CRA Account Name first to avoid collision with standard Account Name
 		if strings.Contains(cleanH, "account name at cra") || cleanH == "account_name_cra" {
 			acctCraIdx = i
 		} else if strings.Contains(cleanH, "transaction date") || cleanH == "date" {
@@ -274,7 +340,6 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 		}
 	}
 
-	// Fallbacks if exact headers were slightly different
 	if wdIdx == -1 {
 		for i, h := range header {
 			cleanH := strings.ToLower(strings.TrimSpace(h))
@@ -348,7 +413,6 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 			accountsMap[acctKey] = accountID
 		}
 
-		// 1. Process Deposit
 		depStr := cleanCurrencyString(record[depIdx])
 		if depStr != "" && depStr != "0" && depStr != "0.00" {
 			depCents, err := utils.DollarsToCents(depStr)
@@ -363,15 +427,14 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 			}
 		}
 
-		// 2. Process Withdrawal
 		wdStr := cleanCurrencyString(record[wdIdx])
 		if wdStr != "" && wdStr != "0" && wdStr != "0.00" {
 			wdCents, err := utils.DollarsToCents(wdStr)
 			if err == nil && wdCents > 0 {
 				_, err = s.DB.Exec(`
-					INSERT INTO transactions (user_id, account_id, type, amount, date, note)
-					VALUES (?, ?, 'WITHDRAWAL', ?, ?, ?)
-				`, userID, accountID, wdCents, dateStr, "Imported from CSV")
+					INSERT INTO transactions (user_id, amount, account_id, type, date, note)
+					VALUES (?, ?, ?, 'WITHDRAWAL', ?, ?)
+				`, userID, wdCents, accountID, dateStr, "Imported from CSV")
 				if err == nil {
 					importedCount++
 				}
@@ -383,7 +446,6 @@ func (s *TFSAService) ImportTransactionsCSV(userID int64, fileReader io.Reader) 
 }
 
 func (s *TFSAService) ExportTransactionsCSV(userID int64, w io.Writer) error {
-	// Query transactions ordered by date ASC, then account name ASC
 	rows, err := s.DB.Query(`
 		SELECT t.type, t.amount, t.date, COALESCE(a.account_name, ''), COALESCE(a.account_name_cra, '')
 		FROM transactions t
@@ -399,7 +461,6 @@ func (s *TFSAService) ExportTransactionsCSV(userID int64, w io.Writer) error {
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
 
-	// Write exact header format matching the import CSV template
 	header := []string{
 		"Index (PK)",
 		"Transaction Date",
@@ -478,14 +539,12 @@ func cleanCurrencyString(val string) string {
 func formatCurrency(cents int64) string {
 	dollars := float64(cents) / 100.0
 
-	// Format to 2 decimal places first
 	str := fmt.Sprintf("%.2f", dollars)
 	parts := strings.Split(str, ".")
 
 	intPart := parts[0]
 	decPart := parts[1]
 
-	// Add thousands separators (commas)
 	var result []string
 	length := len(intPart)
 	for i, c := range intPart {
